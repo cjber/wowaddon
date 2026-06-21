@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Minimal WoW addon installer/updater.
 
-Sources (no CurseForge — it has no open API):
+Sources:
   gh   OWNER/REPO   -> latest GitHub release zip (falls back to source archive)
   wowi ID          -> WoWInterface file id
+  cf   SLUG|MOD_ID  -> CurseForge (needs a free API key, Classic-Era build)
 
 Usage:
   wowaddon                 # sync everything in the manifest
@@ -73,11 +74,54 @@ def wowi_url(uid):
     return json.loads(fetch(f"https://api.mmoui.com/v3/game/WOW/filedetails/{uid}.json"))[0]["UIDownload"]
 
 
+CF_CLASSIC_ERA = 67408   # CurseForge gameVersionTypeId for WoW Classic Era
+
+
+def cf_key():
+    for v in ("CF_API_KEY", "CURSEFORGE_API_KEY"):
+        if os.environ.get(v):
+            return os.environ[v].strip()
+    kf = os.path.expanduser("~/.config/wowaddon/cf_token")
+    if os.path.exists(kf):
+        k = open(kf).read().strip()
+        if k:
+            return k
+    raise RuntimeError("CurseForge needs a free API key in ~/.config/wowaddon/cf_token "
+                       "(create one at https://console.curseforge.com -> API Keys)")
+
+
+def cf_api(path):
+    req = urllib.request.Request("https://api.curseforge.com/v1" + path,
+                                 headers={"x-api-key": cf_key(), "Accept": "application/json", **UA})
+    return json.loads(urllib.request.urlopen(req, timeout=60).read())
+
+
+def cf_url(ref):
+    mod_id = int(ref) if str(ref).isdigit() else None
+    if mod_id is None:
+        hits = cf_api(f"/mods/search?gameId=1&slug={ref}").get("data", [])
+        if not hits:
+            raise RuntimeError(f"CurseForge: no addon with slug '{ref}'")
+        mod_id = hits[0]["id"]
+    files = cf_api(f"/mods/{mod_id}/files?pageSize=50").get("data", [])
+    era = [f for f in files if any(
+        v.get("gameVersionTypeId") == CF_CLASSIC_ERA for v in f.get("sortableGameVersions", []))]
+    if not era:
+        raise RuntimeError("CurseForge: no Classic Era build for this addon")
+    era.sort(key=lambda f: (f.get("releaseType", 3) == 1, f.get("fileDate", "")), reverse=True)
+    url = era[0].get("downloadUrl")
+    if not url:
+        raise RuntimeError("CurseForge: author disabled third-party download for this addon")
+    return url
+
+
 def install(kind, ref):
     if kind == "gh":
         url, is_src = gh_url(ref)
     elif kind == "wowi":
         url, is_src = wowi_url(ref), False
+    elif kind == "cf":
+        url, is_src = cf_url(ref), False
     else:
         raise RuntimeError(f"unknown source '{kind}'")
     z = zipfile.ZipFile(io.BytesIO(fetch(url)))
