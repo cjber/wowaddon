@@ -1,0 +1,13 @@
+# WoW Classic Era / SoD addons. kind ref  # note
+# kind: gh OWNER/REPO  |  wowi FILE_ID     (no CurseForge — no open API)
+# RXPGuides is paid/manual — intentionally not listed.
+gh   Questie/Questie                       # quest helper
+gh   Karl-HeinzSchneider/WoW-DragonflightUI # retail-style UI
+gh   WeakAuras/WeakAuras2                  # aura/proc/CD tracking
+gh   Tercioo/Details-Damage-Meter          # damage + threat meter
+gh   Tercioo/Plater-Nameplates             # nameplates
+gh   BigWigsMods/BigWigs                   # raid boss timers
+gh   AIE-Guild/GreenWall                   # guild chat bridge (Jokerd req)
+wowi 4459                                  # Bagnon (bags)
+wowi 26679                                 # Rune Sets (SoD runes)
+gh   Auctionator/Auctionator              # auction house
