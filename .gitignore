@@ -1,2 +1,7 @@
-__pycache__/
-*.pyc
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+.sift/runs/
+.claude/worktrees/

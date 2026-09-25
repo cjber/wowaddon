@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "id": 8970646,
+      "dateCreated": "2026-09-25T09:02:32.373Z",
+      "displayName": "v0.4.1-forever",
+      "fileName": "TweaksForever-v0.4.1-forever.zip",
+      "projectId": 1708506,
+      "gameVersions": ["1.60.1"],
+      "gameVersionTypeIds": [88568],
+      "releaseType": 1
+    },
+    {
+      "id": 8970493,
+      "dateCreated": "2026-09-25T08:46:07.753Z",
+      "displayName": "v0.4.0-forever",
+      "fileName": "TweaksForever-v0.4.0-forever.zip",
+      "projectId": 1708506,
+      "gameVersions": ["1.60.1"],
+      "gameVersionTypeIds": [88568],
+      "releaseType": 1
+    },
+    {
+      "id": 8954702,
+      "dateCreated": "2026-09-23T11:49:30.333Z",
+      "displayName": "v0.3.0-forever",
+      "fileName": "TweaksForever-v0.3.0-forever.zip",
+      "projectId": 1708506,
+      "gameVersions": ["1.60.1"],
+      "gameVersionTypeIds": [88568],
+      "releaseType": 1
+    }
+  ],
+  "pagination": {
+    "index": 0,
+    "pageSize": 50,
+    "totalCount": 3
+  }
+}
