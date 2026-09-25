@@ -105,3 +105,11 @@ test("no ZIP uses default branch resolved SHA", async () => {
     versionKey: sha,
   });
 });
+
+test("multi-flavor assets retain their own flavor score", () => {
+  for (const flavor of ["era", "forever"] as const) {
+    expect(assetScore("Foo-classic-forever-mainline.zip", flavor)).toBe(10);
+    expect(assetScore("Foo-classic-forever-nolib.zip", flavor)).toBe(5);
+    expect(assetScore("Foo-mainline-wrath.zip", flavor)).toBeUndefined();
+  }
+});

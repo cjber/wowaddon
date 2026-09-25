@@ -64,6 +64,18 @@ export async function protectedFolder(ctx: Context, folder: string): Promise<boo
   const targetInfo = await info(target);
   if (targetInfo?.isSymbolicLink()) return true;
   if (targetInfo?.isDirectory() && (await containsGit(target))) return true;
+  let ancestor = ancestorProtection.get(ctx);
+  if (!ancestor) {
+    ancestor = insideWorktree(ctx);
+    ancestorProtection.set(ctx, ancestor);
+  }
+  return ancestor;
+}
+const ancestorProtection = new WeakMap<Context, Promise<boolean>>();
+export function beginProtectionChecks(ctx: Context): void {
+  ancestorProtection.delete(ctx);
+}
+async function insideWorktree(ctx: Context): Promise<boolean> {
   for (let cursor = ctx.addonsDir; ; cursor = dirname(cursor)) {
     if (await info(join(cursor, ".git"))) return true;
     if (dirname(cursor) === cursor) break;
@@ -184,6 +196,7 @@ export async function withInstallLock<T>(
   }
   if (!acquired) throw new WowaddonError("LOCKED", "Could not acquire the wowaddon lock.");
   try {
+    beginProtectionChecks(ctx);
     await assertRoot(ctx);
     await readState(ctx);
     await recoverPending(ctx);

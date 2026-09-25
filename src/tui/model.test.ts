@@ -4,7 +4,6 @@ import {
   cancelAdd,
   cancelConfirm,
   clearProgress,
-  cycleFlavor,
   initState,
   moveSelection,
   openAdd,
@@ -138,13 +137,7 @@ describe("confirm flows", () => {
   });
 });
 
-describe("flavor and progress", () => {
-  test("cycleFlavor toggles and is blocked while working", () => {
-    const state = initState("era", "/addons");
-    expect(cycleFlavor(state).flavor).toBe("forever");
-    expect(cycleFlavor(setWorking(state, true)).flavor).toBe("era");
-  });
-
+describe("progress", () => {
   test("setProgress and clearProgress track per-row phase", () => {
     let state = initState("era", "/addons");
     state = setProgress(state, { id: "gh:owner/repo", phase: "downloading" });
@@ -236,3 +229,14 @@ describe("tableRows", () => {
     expect(lines[1]).toContain(`${"A".repeat(27)}…`);
   });
 });
+
+for (const phase of ["done", "skipped", "failed"] as const) {
+  test(`terminal phase ${phase} clears progress and shows the real row status`, () => {
+    const addon = row({ status: "update" });
+    let state = initState("era", "/addons", [addon]);
+    state = setProgress(state, { id: addon.entry.id, phase: "downloading" });
+    state = setProgress(state, { id: addon.entry.id, phase, message: "old result" });
+    expect(state.progress[addon.entry.id]).toBeUndefined();
+    expect(rowColumns(addon, state.progress[addon.entry.id]).status).toBe("update available");
+  });
+}

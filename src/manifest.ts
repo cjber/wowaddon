@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { isMissing } from "./config";
 import { canonicalId, parseRef } from "./refs";
 import { atomicWrite } from "./state";
-import { type Context, type Entry, WowaddonError } from "./types";
+import { type Context, type Entry, type SourceKind, WowaddonError } from "./types";
+
+// Legacy CF slugs remain addressable until a lookup can supply their numeric identity.
+function manifestId(kind: SourceKind, ref: string): string {
+  const parsed = parseRef(`${kind} ${ref}`);
+  return kind === "cf" ? `cf:${parsed.ref}` : canonicalId(kind, ref);
+}
 
 export const manifestPath = (ctx: Context): string => join(ctx.configDir, `${ctx.flavor}.txt`);
 export async function readManifest(
@@ -31,7 +37,7 @@ export async function readManifest(
         );
       parsed.ref = await resolveCf(parsed.ref);
     }
-    const id = canonicalId(parsed.kind, parsed.ref);
+    const id = manifestId(parsed.kind, parsed.ref);
     if (seen.has(id)) throw new WowaddonError("DUPLICATE", `Duplicate addon in manifest: ${id}`);
     seen.add(id);
     const note = comments.join("#").trim();
@@ -43,7 +49,7 @@ export async function writeManifest(ctx: Context, entries: Entry[]): Promise<voi
   const seen = new Set<string>();
   const content = entries
     .map((entry) => {
-      if (entry.id !== canonicalId(entry.kind, entry.ref))
+      if (entry.id !== manifestId(entry.kind, entry.ref))
         throw new WowaddonError("INVALID_REF", "Manifest entry has a non-canonical ID.");
       if (seen.has(entry.id)) throw new WowaddonError("DUPLICATE", `Duplicate addon: ${entry.id}`);
       seen.add(entry.id);

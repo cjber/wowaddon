@@ -56,6 +56,8 @@ export function setRows(state: TuiState, rows: Row[]): TuiState {
 }
 
 export function setProgress(state: TuiState, progress: Progress): TuiState {
+  if (["done", "skipped", "failed"].includes(progress.phase))
+    return clearProgress(state, progress.id);
   return { ...state, progress: { ...state.progress, [progress.id]: progress } };
 }
 
@@ -66,7 +68,7 @@ export function clearProgress(state: TuiState, id: string): TuiState {
 }
 
 export function setWorking(state: TuiState, working: boolean): TuiState {
-  return { ...state, working };
+  return { ...state, working, progress: working ? state.progress : {} };
 }
 
 export function setError(state: TuiState, error: string | undefined): TuiState {
@@ -79,12 +81,6 @@ export function setNotice(state: TuiState, notice: string | undefined): TuiState
 
 export function toggleHelp(state: TuiState): TuiState {
   return { ...state, mode: state.mode === "help" ? "list" : "help" };
-}
-
-export function cycleFlavor(state: TuiState): TuiState {
-  if (state.working || state.mode !== "list") return state;
-  const flavor: Flavor = state.flavor === "era" ? "forever" : "era";
-  return { ...state, flavor };
 }
 
 export function openAdd(state: TuiState): TuiState {

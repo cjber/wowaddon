@@ -49,6 +49,7 @@ async function installRoutes() {
   const calls: string[] = [];
   setFetch(async (url) => {
     calls.push(url);
+    if (url === "https://api.cfwidget.com/wow/addons/lost-addon") return json({}, 404);
     if (url === "https://api.github.com/repos/a/b/releases?per_page=100&page=1")
       return json([
         {
@@ -113,10 +114,12 @@ test("cancelled mutation leaves manifest unchanged", async () => {
   ).rejects.toMatchObject({ code: "ABORTED" });
   expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
 });
-test("legacy CF local reads require cache and never use network", async () => {
+test("legacy CF local reads report uncached slugs on their row without network", async () => {
   await writeFile(manifestPath(fixture.ctx), "cf auctionator\n");
-  await expect(listRows(fixture.ctx, { refresh: false })).rejects.toMatchObject({
-    code: "UNRESOLVED_REF",
+  expect((await listRows(fixture.ctx, { refresh: false }))[0]).toMatchObject({
+    entry: { id: "cf:auctionator", ref: "auctionator" },
+    status: "error",
+    message: "Refresh to resolve legacy CurseForge name: auctionator",
   });
   await mkdir(join(fixture.ctx.configDir, "cache"));
   await writeFile(join(fixture.ctx.configDir, "cache/cf-slugs.json"), '{"auctionator":6124}');
@@ -167,4 +170,52 @@ test("WoWI archive TOCs enforce the selected flavor", async () => {
   expect(row.status).toBe("error");
   expect(row.message).toContain("no compatible addon folders");
   expect((await readState(fixture.ctx)).addons).toEqual({});
+});
+
+test("unresolved CF rows do not block refresh, sync, add or remove of other entries", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf lost-addon  # Keep me\ngh a/b\n");
+  const calls = await installRoutes();
+  const local = await listRows(fixture.ctx, { refresh: false });
+  expect(local.map((row) => row.status)).toEqual(["error", "missing"]);
+  expect(calls).toEqual([]);
+  const refreshed = await listRows(fixture.ctx, { refresh: true });
+  expect(refreshed[0]).toMatchObject({
+    entry: { id: "cf:lost-addon", ref: "lost-addon", note: "Keep me" },
+    status: "error",
+    message: "Couldn't resolve that CurseForge name — paste the project URL or its numeric ID",
+  });
+  expect(refreshed[1].latest?.version).toBe("v1");
+  expect((await syncAddons(fixture.ctx, { ids: ["a/b"] }))[0].status).toBe("current");
+  expect((await syncAddons(fixture.ctx, {})).map((row) => row.status)).toEqual([
+    "error",
+    "current",
+  ]);
+  await addAddon(fixture.ctx, "c/d", { install: false });
+  await removeAddon(fixture.ctx, "a/b");
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe(
+    "cf lost-addon  # Keep me\ngh c/d\n",
+  );
+});
+for (const ref of [
+  "lost-addon",
+  "cf:lost-addon",
+  "https://www.curseforge.com/wow/addons/lost-addon",
+]) {
+  test(`remove unresolved CF manifest line by ${ref}`, async () => {
+    await writeFile(manifestPath(fixture.ctx), "cf lost-addon\ngh a/b\n");
+    await removeAddon(fixture.ctx, ref);
+    expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+  });
+}
+
+test("cancelled removal leaves the manifest and installed folders intact", async () => {
+  await installRoutes();
+  await addAddon(fixture.ctx, "a/b", { install: true });
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    removeAddon(fixture.ctx, "a/b", { signal: controller.signal }),
+  ).rejects.toMatchObject({ code: "ABORTED" });
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+  expect(await readFile(join(fixture.ctx.addonsDir, "Foo/init.lua"), "utf8")).toBe("x");
 });

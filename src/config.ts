@@ -89,7 +89,8 @@ export async function openContext(opts: {
   const config = await readConfig(join(configDir, "config.json"));
   const flavor = opts.flavor ?? config.defaultFlavor ?? "era";
   if (!(flavor in flavors)) throw new WowaddonError("CONFIG_INVALID", `Unknown flavor: ${flavor}`);
-  let addonsDir = opts.addonsDir || env.WOW_ADDONS || config.addonsDir?.[flavor];
+  let addonsDir =
+    opts.addonsDir || (flavor === "era" ? env.WOW_ADDONS : undefined) || config.addonsDir?.[flavor];
   if (!addonsDir) {
     const fallback =
       flavor === "era"
@@ -115,7 +116,7 @@ export async function openContext(opts: {
   if (!addonsDir)
     throw new WowaddonError(
       "CONFIG_MISSING",
-      `No ${flavors[flavor].name} AddOns directory found. Set --addons-dir, WOW_ADDONS, or config.json.`,
+      `No ${flavors[flavor].name} AddOns directory found. Set --addons-dir${flavor === "era" ? ", WOW_ADDONS," : ""} or config.json.`,
     );
   addonsDir = resolve(expandHome(addonsDir, home));
   if (!(await directory(addonsDir)))

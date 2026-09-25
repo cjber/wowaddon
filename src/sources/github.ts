@@ -37,10 +37,9 @@ export function assetScore(name: string, flavor: Flavor): number | undefined {
     .replace(/\.zip$/, "")
     .split(/[-_.\s]+/);
   const own = flavors[flavor].tokens;
-  if (tokens.some((token) => flavorTokens.has(token) && !own.includes(token))) return undefined;
-  return (
-    (tokens.some((token) => own.includes(token)) ? 10 : 0) - (tokens.includes("nolib") ? 5 : 0)
-  );
+  const matchesOwn = tokens.some((token) => own.includes(token));
+  if (!matchesOwn && tokens.some((token) => flavorTokens.has(token))) return undefined;
+  return (matchesOwn ? 10 : 0) - (tokens.includes("nolib") ? 5 : 0);
 }
 export async function resolveGithub(
   ctx: Context,

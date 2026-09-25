@@ -1,8 +1,15 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs/promises";
 import { lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setFetch } from "./http";
-import { installAddon, pendingPath, removeInstalled, withInstallLock } from "./install";
+import {
+  installAddon,
+  pendingPath,
+  protectedFolder,
+  removeInstalled,
+  withInstallLock,
+} from "./install";
 import { readState, type State, writeState } from "./state";
 import { offline, tempContext, zip } from "./testing/helpers";
 import type { Entry, Installed, Release } from "./types";
@@ -400,4 +407,23 @@ test("a dev link carrying the addon's CurseForge ID is skipped before the first 
   expect((await installAddon(fixture.ctx, state, legacy, release)).status).toBe("dev");
   expect(calls()).toBe(0);
   expect((await lstat(join(fixture.ctx.addonsDir, "Legacy"))).isSymbolicLink()).toBe(true);
+});
+
+test("ancestor git checks are shared across folders and renewed for the next operation", async () => {
+  const probe = spyOn(fs, "lstat");
+  const ancestor = join(fixture.ctx.addonsDir, ".git");
+  try {
+    await withInstallLock(fixture.ctx, async () => {
+      for (const name of ["Foo", "Bar", "Baz"])
+        expect(await protectedFolder(fixture.ctx, name)).toBe(false);
+    });
+    expect(probe.mock.calls.filter(([path]) => path === ancestor)).toHaveLength(1);
+    await mkdir(join(dirname(fixture.ctx.addonsDir), ".git"));
+    await withInstallLock(fixture.ctx, async () => {
+      expect(await protectedFolder(fixture.ctx, "Foo")).toBe(true);
+    });
+    expect(probe.mock.calls.filter(([path]) => path === ancestor)).toHaveLength(2);
+  } finally {
+    probe.mockRestore();
+  }
 });

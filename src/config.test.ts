@@ -19,7 +19,7 @@ async function dir(path: string) {
   await mkdir(path, { recursive: true });
   return path;
 }
-test("CLI > environment > config and selected default flavor", async () => {
+test("CLI > era environment > config and selected default flavor", async () => {
   const { root, config, env } = await home();
   const cli = await dir(join(root, "cli"));
   const environment = await dir(join(root, "env"));
@@ -31,9 +31,9 @@ test("CLI > environment > config and selected default flavor", async () => {
   expect(
     (await openContext({ addonsDir: cli, env: { ...env, WOW_ADDONS: environment } })).addonsDir,
   ).toBe(cli);
-  expect((await openContext({ env: { ...env, WOW_ADDONS: environment } })).addonsDir).toBe(
-    environment,
-  );
+  expect(
+    (await openContext({ flavor: "era", env: { ...env, WOW_ADDONS: environment } })).addonsDir,
+  ).toBe(environment);
   expect(await openContext({ env })).toMatchObject({ addonsDir: configured, flavor: "forever" });
 });
 test("legacy manifest copied exactly once and left untouched", async () => {
@@ -98,4 +98,26 @@ test("invalid config blocks and explicit missing path does not fall back", async
   await expect(openContext({ addonsDir: join(root, "missing"), env })).rejects.toMatchObject({
     code: "CONFIG_MISSING",
   });
+});
+
+test("Forever ignores legacy WOW_ADDONS, including a configured default flavor", async () => {
+  const { root, config, env } = await home();
+  const era = await dir(join(root, "era"));
+  const forever = await dir(join(root, "forever"));
+  await writeFile(
+    join(config, "config.json"),
+    JSON.stringify({
+      defaultFlavor: "forever",
+      addonsDir: { forever },
+    }),
+  );
+  for (const flavor of [undefined, "forever"] as const) {
+    expect((await openContext({ flavor, env: { ...env, WOW_ADDONS: era } })).addonsDir).toBe(
+      forever,
+    );
+  }
+  await rm(join(config, "config.json"));
+  await expect(
+    openContext({ flavor: "forever", env: { ...env, WOW_ADDONS: era } }),
+  ).rejects.toMatchObject({ code: "CONFIG_MISSING" });
 });

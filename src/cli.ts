@@ -1,5 +1,5 @@
 import { addAddon, listRows, openContext, removeAddon, syncAddons } from "./service";
-import type { Flavor, Progress, Row } from "./types";
+import type { Context, Flavor, Progress, Row } from "./types";
 
 const VERSION = "1.0.0";
 
@@ -154,6 +154,56 @@ export function tuiOptions(argv: string[]): Globals {
   return parseArgs(argv).globals;
 }
 
+type CommandHandler = (ctx: Context, args: string[], signal: AbortSignal) => Promise<number>;
+const commands: Record<string, CommandHandler> = {
+  async sync(ctx, args, signal) {
+    const { flags, positionals } = splitFlags(args, ["adopt"], []);
+    const rows = await syncAddons(ctx, {
+      ids: positionals.length ? positionals : undefined,
+      adopt: Boolean(flags.adopt),
+      signal: signal,
+      onProgress: logProgress,
+    });
+    for (const row of rows) console.log(formatResultLine(row));
+    return summarizeExit(rows);
+  },
+
+  async add(ctx, args, signal) {
+    const { flags, positionals } = splitFlags(args, ["no-install", "adopt"], ["note"]);
+    if (!positionals.length) usageError("usage: wowaddon add <ref|url> | add <kind> <ref>");
+    const input = positionals.join(" ");
+    const row = await addAddon(ctx, input, {
+      note: typeof flags.note === "string" ? flags.note : undefined,
+      install: !flags["no-install"],
+      adopt: Boolean(flags.adopt),
+      signal: signal,
+      onProgress: logProgress,
+    });
+    console.log(formatResultLine(row));
+    return summarizeExit([row]);
+  },
+
+  async remove(ctx, args) {
+    const { positionals } = splitFlags(args, [], []);
+    if (!positionals.length) usageError("usage: wowaddon remove <id|ref>");
+    await removeAddon(ctx, positionals.join(" "));
+    console.log(`OK   removed ${positionals.join(" ")}`);
+    return 0;
+  },
+
+  async list(ctx, args, signal) {
+    const { flags, positionals } = splitFlags(args, ["refresh", "json"], []);
+    if (positionals.length) usageError("usage: wowaddon list [--refresh] [--json]");
+    const rows = await listRows(ctx, {
+      refresh: Boolean(flags.refresh),
+      signal: signal,
+    });
+    if (flags.json) console.log(JSON.stringify(rows));
+    else for (const row of rows) console.log(formatListLine(row));
+    return 0;
+  },
+};
+
 export async function runCli(argv: string[]): Promise<number | undefined> {
   let parsed: ParsedArgs;
   try {
@@ -176,8 +226,7 @@ export async function runCli(argv: string[]): Promise<number | undefined> {
     parsed.command ?? (process.stdin.isTTY && process.stdout.isTTY ? undefined : "sync");
   if (command === undefined) return undefined;
 
-  const validCommands = ["sync", "add", "remove", "list"];
-  if (!validCommands.includes(command)) {
+  if (!Object.hasOwn(commands, command)) {
     warn(`unknown command: ${command}\n\n${HELP}`);
     return 2;
   }
@@ -202,54 +251,7 @@ export async function runCli(argv: string[]): Promise<number | undefined> {
   for (const notice of ctx.notices) warn(notice);
 
   try {
-    if (command === "sync") {
-      const { flags, positionals } = splitFlags(parsed.rest, ["adopt"], []);
-      const rows = await syncAddons(ctx, {
-        ids: positionals.length ? positionals : undefined,
-        adopt: Boolean(flags.adopt),
-        signal: abortController.signal,
-        onProgress: logProgress,
-      });
-      for (const row of rows) console.log(formatResultLine(row));
-      return summarizeExit(rows);
-    }
-
-    if (command === "add") {
-      const { flags, positionals } = splitFlags(parsed.rest, ["no-install", "adopt"], ["note"]);
-      if (!positionals.length) usageError("usage: wowaddon add <ref|url> | add <kind> <ref>");
-      const input = positionals.join(" ");
-      const row = await addAddon(ctx, input, {
-        note: typeof flags.note === "string" ? flags.note : undefined,
-        install: !flags["no-install"],
-        adopt: Boolean(flags.adopt),
-        signal: abortController.signal,
-        onProgress: logProgress,
-      });
-      console.log(formatResultLine(row));
-      return summarizeExit([row]);
-    }
-
-    if (command === "remove") {
-      const { positionals } = splitFlags(parsed.rest, [], []);
-      if (!positionals.length) usageError("usage: wowaddon remove <id|ref>");
-      await removeAddon(ctx, positionals.join(" "));
-      console.log(`OK   removed ${positionals.join(" ")}`);
-      return 0;
-    }
-
-    if (command === "list") {
-      const { flags, positionals } = splitFlags(parsed.rest, ["refresh", "json"], []);
-      if (positionals.length) usageError("usage: wowaddon list [--refresh] [--json]");
-      const rows = await listRows(ctx, {
-        refresh: Boolean(flags.refresh),
-        signal: abortController.signal,
-      });
-      if (flags.json) console.log(JSON.stringify(rows));
-      else for (const row of rows) console.log(formatListLine(row));
-      return 0;
-    }
-
-    return 2;
+    return await commands[command](ctx, parsed.rest, abortController.signal);
   } catch (error) {
     if (abortController.signal.aborted) return 130;
     if (error instanceof CliUsageError) {
