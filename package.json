@@ -1,0 +1,29 @@
+{
+  "name": "wowaddon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "wowaddon": "bin/wowaddon"
+  },
+  "scripts": {
+    "start": "bun run src/index.tsx",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun test"
+  },
+  "dependencies": {
+    "@opentui/core": "0.4.5",
+    "@opentui/react": "0.4.5",
+    "@zip.js/zip.js": "2.18.2",
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/bun": "1.3.14",
+    "@types/react": "19.2.17",
+    "typescript": "7.0.2"
+  }
+}

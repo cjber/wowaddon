@@ -1,13 +1,19 @@
-# WoW Classic Era / SoD addons. kind ref  # note
-# kind: gh OWNER/REPO  |  wowi FILE_ID     (no CurseForge — no open API)
-# RXPGuides is paid/manual — intentionally not listed.
-gh   Questie/Questie                       # quest helper
-gh   Karl-HeinzSchneider/WoW-DragonflightUI # retail-style UI
-gh   WeakAuras/WeakAuras2                  # aura/proc/CD tracking
-gh   Tercioo/Details-Damage-Meter          # damage + threat meter
-gh   Tercioo/Plater-Nameplates             # nameplates
-gh   BigWigsMods/BigWigs                   # raid boss timers
-gh   AIE-Guild/GreenWall                   # guild chat bridge (Jokerd req)
-wowi 4459                                  # Bagnon (bags)
-wowi 26679                                 # Rune Sets (SoD runes)
-gh   Auctionator/Auctionator              # auction house
+# Example manifests. kind ref  # note
+# kind: gh OWNER/REPO | cf SLUG_OR_ID | wowi FILE_ID
+#
+# Copy the section you want to ${XDG_CONFIG_HOME:-~/.config}/wowaddon/era.txt or
+# forever.txt. A pre-existing addons.txt from the old script is migrated to era.txt
+# automatically the first time era.txt is missing.
+
+# --- era.txt (WoW Classic Era) ---
+gh   Questie/Questie                      # quest helper
+gh   WeakAuras/WeakAuras2                 # aura/proc/CD tracking
+gh   Tercioo/Details-Damage-Meter         # damage + threat meter
+gh   BigWigsMods/BigWigs                  # raid boss timers
+cf   6124                                 # Auctionator
+wowi 26679                                # Rune Sets (SoD runes)
+
+# --- forever.txt (WoW: Forever) ---
+gh   Questie/Questie                      # quest helper
+gh   cjber/skillup-forever                # profession skillup
+cf   auctionator                          # Auctionator (slugs work too)
