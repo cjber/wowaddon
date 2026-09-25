@@ -58,9 +58,9 @@ export class AddonActions {
   }
 
   private finishWork(generation: number) {
-    if (generation !== this.generation) return;
     this.busy = false;
     this.workAbort = undefined;
+    if (generation !== this.generation) return;
     this.update((state) => setWorking(state, false));
   }
 
