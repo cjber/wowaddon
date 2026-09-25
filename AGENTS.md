@@ -12,10 +12,10 @@ bun run check      # typecheck + lint + test
 bun run typecheck
 bun run lint
 bun test
+python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
 ```
 
-CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and history,
-and pinned `sift check` and `sift agents check` commands.
+CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and history.
 
 ## Layout
 
