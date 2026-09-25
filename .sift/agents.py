@@ -24,9 +24,11 @@ from urllib.parse import unquote, urlsplit
 
 sys.dont_write_bytecode = True
 
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 MAX_BYTES = 32 * 1024
 NOTE_BYTES = 12 * 1024
+MAX_STANDARD_FILES = 1000
+MAX_STANDARD_BYTES = 16 * 1024 * 1024
 SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", ".venv", "target", "__pycache__"}
 PATH_EXTENSIONS = set(
     "py pyi js jsx ts tsx mjs cjs mts cts lua luau sh bash zsh rb go rs c h cc cpp hpp cs java kt "  # noqa: SIM905 (a word list reads best as one string)
@@ -639,22 +641,51 @@ class StandardError(Exception):
         self.code = code
 
 
-def fetch_standard(url: str, sha: str, path: str) -> bytes:
+def fetch_standard(url: str, sha: str, path: str, destination: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="sift-standards-") as directory:
-        for args in (
-            ("init", "-q"),
-            ("fetch", "-q", "--depth", "1", "--filter=blob:none", url, sha),
-            ("show", f"{sha}:{path}/SKILL.md"),
-        ):
-            result = subprocess.run(
+
+        def run(*args: str) -> bytes:
+            return subprocess.run(
                 ["git", *args],
                 cwd=directory,
                 capture_output=True,
                 check=True,
                 timeout=60,
                 env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-            )
-        return result.stdout
+            ).stdout
+
+        run("init", "-q")
+        run("fetch", "-q", "--depth", "1", "--filter=blob:none", url, sha)
+        entries = run("ls-tree", "-r", "-l", "-z", f"{sha}:{path}").split(b"\0")[:-1]
+        if len(entries) > MAX_STANDARD_FILES:
+            raise ValueError(f"pack exceeds {MAX_STANDARD_FILES} files")
+        files = []
+        total = 0
+        for entry in entries:
+            metadata, filename = entry.split(b"\t", 1)
+            mode, kind, oid, size = metadata.split()
+            name = os.fsdecode(filename)
+            relative = Path(name)
+            if (
+                relative.is_absolute()
+                or relative.drive
+                or "\\" in name
+                or any(part in {"", ".", "..", ".git"} for part in name.split("/"))
+            ):
+                raise ValueError(f"unsafe pack path: {name!r}")
+            if mode not in {b"100644", b"100755"} or kind != b"blob":
+                raise ValueError(f"pack entry must be a regular file (no symlinks or submodules): {name!r}")
+            total += int(size)
+            if total > MAX_STANDARD_BYTES:
+                raise ValueError(f"pack exceeds {MAX_STANDARD_BYTES} bytes")
+            files.append((relative, mode, oid.decode("ascii")))
+        if not any(relative == Path("SKILL.md") for relative, _, _ in files):
+            raise ValueError("pack is missing SKILL.md")
+        for relative, mode, oid in files:
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(run("cat-file", "blob", oid))
+            target.chmod(0o755 if mode == b"100755" else 0o644)
 
 
 def pinned_standard(name: str, url: str, overrides: list[Path], *, offline: bool) -> tuple[Path, str]:
@@ -685,7 +716,8 @@ def pinned_standard(name: str, url: str, overrides: list[Path], *, offline: bool
     if override is not None:
         return override, "override"
     cache_root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache").expanduser()
-    skill = cache_root / "sift/standards" / owner / repo / ref.lower() / path / "SKILL.md"
+    # v2 caches whole directories; legacy SKILL.md-only entries are not complete packs.
+    skill = cache_root / "sift/standards-v2" / owner / repo / ref.lower() / path / "SKILL.md"
     if skill.is_file():
         return skill.parent, "cache"
     if offline:
@@ -698,18 +730,24 @@ def pinned_standard(name: str, url: str, overrides: list[Path], *, offline: bool
         owner=owner, repo=repo
     )
     try:
-        content = fetch_standard(git_url, ref.lower(), path)
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        skill.parent.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".sift-", dir=skill.parent.parent) as directory:
+            pending = Path(directory) / name
+            pending.mkdir()
+            fetch_standard(git_url, ref.lower(), path, pending)
+            try:
+                os.replace(pending, skill.parent)
+            except OSError:
+                if not skill.is_file():
+                    raise
+                # A concurrent fetch has already published the complete directory.
+                return skill.parent, "cache"
+    except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         stderr = os.fsdecode(getattr(error, "stderr", None) or b"").splitlines()
         detail = stderr[0] if stderr else str(error)
         raise StandardError(
             "standard-fetch-failed", f"{name}: failed to fetch {url} ({git_url}): {detail}"
         ) from error
-    skill.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".sift-", dir=skill.parent) as directory:
-        pending = Path(directory) / "SKILL.md"
-        pending.write_bytes(content)
-        os.replace(pending, skill)
     return skill.parent, "fetched"
 
 

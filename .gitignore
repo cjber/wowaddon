@@ -4,4 +4,4 @@ dist/
 .env.local
 .DS_Store
 .sift/runs/
-.sift/reports/
+.claude/worktrees/

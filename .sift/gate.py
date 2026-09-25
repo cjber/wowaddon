@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 sys.dont_write_bytecode = True
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 CONFIG = ".sift/sgconfig.yml"
 SCRIPT_TIMEOUT = 600.0

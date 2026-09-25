@@ -44,6 +44,8 @@ CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and
 - A GitHub token goes only to `api.github.com`; a CurseForge key only to
   `api.curseforge.com`. Never to a download host.
 - Commits are signed (`git commit -S`) with the personal email.
+- Quality: load `.agents/skills/sift-project/SKILL.md` before cleanup, dead-code or refactoring
+  work.
 
 ## Standards
 
