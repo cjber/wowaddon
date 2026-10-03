@@ -25,13 +25,13 @@ export const flavors: Record<
     cfType: 88568,
     version: /^1\.60(?:\.|$)/,
     interfaces: (n) => n >= 16000 && n < 16100,
-    tokens: ["forever"],
+    tokens: ["forever", "camelot"],
   },
 };
 
 export function stripFlavorSuffix(name: string): string {
   return name.replace(
-    /[-_](?:forever|classic|vanilla|era|bcc|tbc|wrath|wotlk|cata|mists|mainline|retail|standard)$/i,
+    /[-_](?:forever|camelot|classic|vanilla|era|bcc|tbc|wrath|wotlk|cata|mists|mainline|retail|standard)$/i,
     "",
   );
 }
