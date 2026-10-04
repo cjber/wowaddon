@@ -8,6 +8,7 @@ by a small per-flavor text manifest.
 
 ```sh
 bun install --frozen-lockfile
+bun run start      # run the app (TUI when stdin and stdout are a terminal)
 bun run check      # typecheck + lint + test
 bun run typecheck
 bun run lint
@@ -36,8 +37,6 @@ CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and
 - Never touch an addon folder that is a symlink, contains `.git`, or sits inside a git
   worktree — skip it and say why. That is what keeps this repo's own addons live during
   development.
-- `src/service.ts` is the only surface the CLI and TUI use for state or network. Neither reaches
-  into `src/sources/`, `src/install.ts` or `src/state.ts` directly.
 - Secrets (GitHub token, optional CurseForge key) come from env vars, `~/.config/wowaddon/`
   token files, or `gh auth token` — never written into the user’s config.json, the manifest or state
   files.
@@ -46,7 +45,3 @@ CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and
 - Commits are signed (`git commit -S`) with the personal email.
 - Quality: load `.agents/skills/sift-project/SKILL.md` before cleanup, dead-code or refactoring
   work.
-
-## Standards
-
-None yet specific to this repo beyond the commands above.
