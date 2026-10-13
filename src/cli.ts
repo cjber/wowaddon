@@ -183,10 +183,10 @@ const commands: Record<string, CommandHandler> = {
     return summarizeExit([row]);
   },
 
-  async remove(ctx, args) {
+  async remove(ctx, args, signal) {
     const { positionals } = splitFlags(args, [], []);
     if (!positionals.length) usageError("usage: wowaddon remove <id|ref>");
-    await removeAddon(ctx, positionals.join(" "));
+    await removeAddon(ctx, positionals.join(" "), { signal });
     console.log(`OK   removed ${positionals.join(" ")}`);
     return 0;
   },

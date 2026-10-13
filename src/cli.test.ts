@@ -22,7 +22,9 @@ const syncAddonsMock = mock(
     _opts: { ids?: string[]; adopt?: boolean; signal?: AbortSignal },
   ): Promise<Row[]> => [],
 );
-const removeAddonMock = mock(async (_ctx: Context, _id: string) => {});
+const removeAddonMock = mock(
+  async (_ctx: Context, _id: string, _opts?: { signal?: AbortSignal }) => {},
+);
 const parseRefMock = mock((_input: string) => ({ kind: "gh" as const, ref: "owner/repo" }));
 
 // mock.module patches the module registry process-wide, not just for this file, so capture
@@ -197,6 +199,11 @@ describe("remove", () => {
     const code = await runCli(["remove", "cf:6124"]);
     expect(code).toBe(0);
     expect(removeAddonMock.mock.calls[0][1]).toBe("cf:6124");
+  });
+
+  test("passes the abort signal through", async () => {
+    await runCli(["remove", "cf:6124"]);
+    expect(removeAddonMock.mock.calls[0][2]?.signal).toBeInstanceOf(AbortSignal);
   });
 });
 
