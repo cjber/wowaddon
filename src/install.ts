@@ -147,52 +147,84 @@ async function releaseLock(ctx: Context, token: string): Promise<void> {
     if (!isMissing(error)) throw error;
   }
 }
+// No wowaddon operation runs this long, so an older lock whose PID is alive belongs to a
+// process that reused the PID of a crashed run.
+export const LOCK_MAX_AGE_MS = 60 * 60 * 1000;
+async function tryLock(ctx: Context, token: string): Promise<boolean> {
+  let lock: FileHandle;
+  try {
+    lock = await open(lockPath(ctx), "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+  try {
+    await lock.writeFile(token);
+    await lock.sync();
+  } finally {
+    await lock.close();
+  }
+  return true;
+}
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (probe) {
+    const code = (probe as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    // EPERM: the process exists but belongs to another user.
+    if (code === "EPERM") return true;
+    throw probe;
+  }
+}
+function assertStale(ctx: Context, existing: string): void {
+  let pid: unknown;
+  let startedAt: unknown;
+  try {
+    ({ pid, startedAt } = JSON.parse(existing));
+  } catch {
+    throw new WowaddonError(
+      "LOCKED",
+      `Invalid lock file: ${lockPath(ctx)}. Check for a running wowaddon process before removing it.`,
+    );
+  }
+  if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0)
+    throw new WowaddonError("LOCKED", "Invalid wowaddon lock PID.");
+  const expired =
+    typeof startedAt === "number" &&
+    Number.isFinite(startedAt) &&
+    Date.now() - startedAt > LOCK_MAX_AGE_MS;
+  if (!expired && processAlive(pid))
+    throw new WowaddonError(
+      "LOCKED",
+      `Another wowaddon operation is running (PID ${pid}). If it is not, remove ${lockPath(ctx)}.`,
+    );
+}
 export async function withInstallLock<T>(
   ctx: Context,
   work: (state: State) => Promise<T>,
 ): Promise<T> {
   await mkdir(dirname(lockPath(ctx)), { recursive: true });
-  const token = JSON.stringify({ pid: process.pid, token: crypto.randomUUID() });
-  let acquired = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const token = JSON.stringify({
+    pid: process.pid,
+    token: crypto.randomUUID(),
+    startedAt: Date.now(),
+  });
+  // Every reclaim is followed by another attempt, so the last stale lock is never left unretried.
+  let acquired = await tryLock(ctx, token);
+  for (let attempt = 0; !acquired && attempt < 3; attempt++) {
+    let existing: string | undefined;
     try {
-      const lock = await open(lockPath(ctx), "wx", 0o600);
-      try {
-        await lock.writeFile(token);
-        await lock.sync();
-      } finally {
-        await lock.close();
-      }
-      acquired = true;
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let existing: string;
-      try {
-        existing = await readFile(lockPath(ctx), "utf8");
-      } catch (readError) {
-        if (isMissing(readError)) continue;
-        throw readError;
-      }
-      let pid: number;
-      try {
-        pid = JSON.parse(existing).pid;
-      } catch {
-        throw new WowaddonError(
-          "LOCKED",
-          `Invalid lock file: ${lockPath(ctx)}. Check for a running wowaddon process before removing it.`,
-        );
-      }
-      if (!Number.isSafeInteger(pid) || pid <= 0)
-        throw new WowaddonError("LOCKED", "Invalid wowaddon lock PID.");
-      try {
-        process.kill(pid, 0);
-        throw new WowaddonError("LOCKED", `Another wowaddon operation is running (PID ${pid}).`);
-      } catch (probe) {
-        if ((probe as NodeJS.ErrnoException).code !== "ESRCH") throw probe;
-      }
+      existing = await readFile(lockPath(ctx), "utf8");
+    } catch (readError) {
+      if (!isMissing(readError)) throw readError;
+    }
+    if (existing !== undefined) {
+      assertStale(ctx, existing);
       await reclaimLock(ctx, existing);
     }
+    acquired = await tryLock(ctx, token);
   }
   if (!acquired) throw new WowaddonError("LOCKED", "Could not acquire the wowaddon lock.");
   try {

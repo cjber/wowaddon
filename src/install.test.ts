@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { setFetch } from "./http";
 import {
   installAddon,
+  LOCK_MAX_AGE_MS,
   pendingPath,
   protectedFolder,
   removeInstalled,
@@ -286,6 +287,55 @@ test("live lock blocks, dead PID lock is recovered", async () => {
   });
   await writeFile(lock, JSON.stringify({ pid: 2147483647 }));
   await withInstallLock(fixture.ctx, async () => {});
+  expect(await readdir(dirname(lock))).not.toContain("forever.lock");
+});
+test("a lock held by another user's live process (EPERM) blocks", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  await writeFile(lock, JSON.stringify({ pid: 4242, startedAt: Date.now() }));
+  const kill = spyOn(process, "kill").mockImplementation(() => {
+    throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+  });
+  try {
+    await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+      code: "LOCKED",
+    });
+  } finally {
+    kill.mockRestore();
+  }
+  expect(await readFile(lock, "utf8")).toContain("4242");
+});
+test("a lock older than the maximum age is reclaimed even if its PID was reused", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  await writeFile(
+    lock,
+    JSON.stringify({ pid: process.pid, startedAt: Date.now() - LOCK_MAX_AGE_MS - 1000 }),
+  );
+  await withInstallLock(fixture.ctx, async () => {});
+  expect(await readdir(dirname(lock))).not.toContain("forever.lock");
+  await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+  await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+    code: "LOCKED",
+  });
+});
+test("reclaiming a stale lock is always followed by another attempt", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  const realOpen = fs.open;
+  let stale = 0;
+  // Three dead runs leave a lock just before each of the first three attempts.
+  const probe = spyOn(fs, "open").mockImplementation((async (path, ...rest) => {
+    if (path === lock && stale < 3)
+      await writeFile(lock, JSON.stringify({ pid: 2147483647, run: ++stale }));
+    return realOpen(path, ...rest);
+  }) as typeof fs.open);
+  try {
+    expect(await withInstallLock(fixture.ctx, async () => "ran")).toBe("ran");
+  } finally {
+    probe.mockRestore();
+  }
+  expect(stale).toBe(3);
   expect(await readdir(dirname(lock))).not.toContain("forever.lock");
 });
 test("corrupt pending record blocks mutations and never deletes outside staging", async () => {
