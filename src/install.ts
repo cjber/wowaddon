@@ -265,22 +265,25 @@ async function rollback(ctx: Context, pending: Pending): Promise<void> {
     const target = join(ctx.addonsDir, operation.folder);
     const backup = join(pending.txDir, "old", operation.folder);
     const staged = join(pending.txDir, "new", operation.folder);
+    const hasBackup = !!(await info(backup));
+    const placedNew = !operation.hadOld && operation.putNew && !(await info(staged));
+    if (!hasBackup && !placedNew) {
+      if (operation.hadOld && !(await info(target)))
+        throw new WowaddonError(
+          "RECOVERY_BLOCKED",
+          `Missing original and backup for ${operation.folder}; preserve ${pending.txDir}.`,
+        );
+      // Nothing of this operation was moved, so there is nothing to undo and the folder is left
+      // alone, even if it has become protected since.
+      continue;
+    }
     if (await protectedFolder(ctx, operation.folder))
       throw new WowaddonError(
         "RECOVERY_BLOCKED",
         `Cannot recover protected folder ${operation.folder}; backups remain in ${pending.txDir}.`,
       );
-    if (await info(backup)) {
-      await rm(target, { recursive: true, force: true });
-      await rename(backup, target);
-    } else if (!operation.hadOld && operation.putNew && !(await info(staged))) {
-      await rm(target, { recursive: true, force: true });
-    } else if (operation.hadOld && !(await info(target))) {
-      throw new WowaddonError(
-        "RECOVERY_BLOCKED",
-        `Missing original and backup for ${operation.folder}; preserve ${pending.txDir}.`,
-      );
-    }
+    await rm(target, { recursive: true, force: true });
+    if (hasBackup) await rename(backup, target);
   }
   await writeState(ctx, pending.before);
   await rm(pendingPath(ctx));

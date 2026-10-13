@@ -328,6 +328,31 @@ test("cancellation after the first folder swap rolls back every change", async (
   expect(await contents("Bar")).toBe("old");
   expect(await readState(fixture.ctx)).toEqual(state);
 });
+test("a folder protected mid-install rolls back the swapped ones and is left untouched", async () => {
+  await folder("Foo");
+  const bar = await folder("Bar");
+  await own(["Foo", "Bar"]);
+  await download(["Foo", "Bar"]);
+  let calls = 0;
+  await expect(
+    withInstallLock(fixture.ctx, (current) =>
+      installAddon(fixture.ctx, current, entry, release, {
+        rename: async (from, to) => {
+          await rename(from, to);
+          // Foo has been swapped in; Bar becomes a checkout before its turn.
+          if (++calls === 2) await mkdir(join(bar, ".git"));
+        },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "DEV_PROTECTED" });
+  expect(calls).toBe(2);
+  expect(await contents("Foo")).toBe("old");
+  expect(await contents("Bar")).toBe("old");
+  expect((await readdir(bar)).sort()).toEqual([".git", "marker"]);
+  expect(await readState(fixture.ctx)).toEqual(state);
+  expect(await readdir(dirname(fixture.ctx.addonsDir))).toEqual(["AddOns"]);
+  expect(await readdir(dirname(pendingPath(fixture.ctx)))).not.toContain("forever.pending.json");
+});
 test("protection is rechecked after download before swap", async () => {
   const path = await folder("Foo");
   await own();
