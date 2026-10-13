@@ -266,14 +266,16 @@ test("remove deletes only owned folders", async () => {
   expect(await readdir(fixture.ctx.addonsDir)).toEqual(["Unrelated"]);
   expect((await readState(fixture.ctx)).addons).toEqual({});
 });
-test("remove refuses a dev folder and keeps ownership", async () => {
+test("remove stops tracking a dev folder and leaves the folder untouched", async () => {
   const path = await folder("Foo");
   await writeFile(join(path, ".git"), "gitdir: /dev");
   await own();
-  await expect(
-    withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, entry.id)),
-  ).rejects.toMatchObject({ code: "DEV_PROTECTED" });
-  expect(await readState(fixture.ctx)).toEqual(state);
+  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, entry.id));
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+  expect((await readdir(path)).sort()).toEqual([".git", "marker"]);
+  expect(await contents("Foo")).toBe("old");
+  expect(await readFile(join(path, ".git"), "utf8")).toBe("gitdir: /dev");
+  expect(await readdir(dirname(fixture.ctx.addonsDir))).toEqual(["AddOns"]);
 });
 test("live lock blocks, dead PID lock is recovered", async () => {
   const lock = join(fixture.ctx.configDir, "state/forever.lock");

@@ -16,4 +16,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Per-flavor manifests and installed-state tracking, with automatic migration of a legacy
   `addons.txt` to `era.txt`.
 - Dev-link protection: symlinked, git-tracked or in-worktree addon folders are skipped
-  rather than overwritten.
+  rather than overwritten, and removing one stops tracking it while its folder stays as it is.

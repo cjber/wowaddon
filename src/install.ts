@@ -478,6 +478,11 @@ export async function removeInstalled(
   opts: InstallOptions = {},
 ): Promise<void> {
   if (!state.addons[id]) return;
-  if (!(await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts)))
-    throw new WowaddonError("DEV_PROTECTED", "dev link, skipped");
+  if (await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts)) return;
+  // A dev-protected folder is never touched: stop tracking it and leave the folder as it is.
+  checkAbort(opts.signal);
+  const next = structuredClone(state);
+  delete next.addons[id];
+  await writeState(ctx, next);
+  state.addons = next.addons;
 }
