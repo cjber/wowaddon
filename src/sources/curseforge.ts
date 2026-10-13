@@ -144,9 +144,11 @@ async function filesFrom(
   };
   const files = new Map<number, CfFile>();
   let total = Infinity;
+  // The official files endpoint has no sort parameters, so it is filtered to this flavor's
+  // game version type instead: the newest matching file then falls within the pages read.
   for (let page = 0; page < 10; page++) {
     const url = official
-      ? `https://api.curseforge.com/v1/mods/${id}/files?index=${page * 50}&pageSize=50`
+      ? `https://api.curseforge.com/v1/mods/${id}/files?gameVersionTypeId=${flavors[ctx.flavor].cfType}&index=${page * 50}&pageSize=50`
       : `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=${page}&pageSize=50&sort=dateCreated&sortDescending=true`;
     const response = await requestJson<FilesPage>(url, options);
     if (

@@ -148,7 +148,9 @@ test("official fallback only after keyless failure and with a key", async () => 
       expect(new Headers(init?.headers).has("x-api-key")).toBe(false);
       return new Response(null, { status: 403 });
     }
-    expect(url).toBe("https://api.curseforge.com/v1/mods/1708506/files?index=0&pageSize=50");
+    expect(url).toBe(
+      "https://api.curseforge.com/v1/mods/1708506/files?gameVersionTypeId=88568&index=0&pageSize=50",
+    );
     expect(new Headers(init?.headers).get("x-api-key")).toBe("cf-secret");
     return json(forever);
   });
@@ -156,6 +158,21 @@ test("official fallback only after keyless failure and with a key", async () => 
   expect(calls).toHaveLength(2);
 });
 
+test("official listing asks for the flavor's game version type on every page", async () => {
+  await writeFile(join(fixture.ctx.configDir, "cf_token"), "cf-secret");
+  const official: string[] = [];
+  setFetch(async (url) => {
+    if (url.startsWith("https://www.curseforge.com/")) return new Response(null, { status: 403 });
+    official.push(url);
+    const index = Number(new URL(url).searchParams.get("index"));
+    return json(page(index === 0 ? [file({ id: 1 })] : [file({ id: 2 })], 51));
+  });
+  await resolveCurseforge(fixture.ctx, "1708506");
+  expect(official.map((url) => Object.fromEntries(new URL(url).searchParams))).toEqual([
+    { gameVersionTypeId: "88568", index: "0", pageSize: "50" },
+    { gameVersionTypeId: "88568", index: "50", pageSize: "50" },
+  ]);
+});
 test("prototype names are valid slugs, never inherited cache IDs", async () => {
   setFetch(routeFetch({ "https://api.cfwidget.com/wow/addons/constructor": { id: 6124 } }).fetch);
   expect(await resolveCfProject(fixture.ctx, "constructor")).toMatchObject({ id: "6124" });
