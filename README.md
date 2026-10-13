@@ -96,7 +96,8 @@ result is a config error (exit `2`) with the paths it found or how to set one.
 ## Dev-link safety
 
 An addon folder that is a symlink, contains `.git`, or sits inside a git worktree is never
-touched — sync skips it and says why. That is how this repo's own addons under active
+touched — sync skips it and says why, and `remove` stops tracking it (manifest line and
+state entry) while the folder stays as it is. That is how this repo's own addons under active
 development stay live while everything else updates normally. A folder installed outside
 wowaddon is left alone too, unless you pass `--adopt` (or confirm the TUI's take-over
 prompt), after which it will be replaced like any other managed folder.

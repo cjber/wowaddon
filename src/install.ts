@@ -147,52 +147,84 @@ async function releaseLock(ctx: Context, token: string): Promise<void> {
     if (!isMissing(error)) throw error;
   }
 }
+// No wowaddon operation runs this long, so an older lock whose PID is alive belongs to a
+// process that reused the PID of a crashed run.
+export const LOCK_MAX_AGE_MS = 60 * 60 * 1000;
+async function tryLock(ctx: Context, token: string): Promise<boolean> {
+  let lock: FileHandle;
+  try {
+    lock = await open(lockPath(ctx), "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+  try {
+    await lock.writeFile(token);
+    await lock.sync();
+  } finally {
+    await lock.close();
+  }
+  return true;
+}
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (probe) {
+    const code = (probe as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    // EPERM: the process exists but belongs to another user.
+    if (code === "EPERM") return true;
+    throw probe;
+  }
+}
+function assertStale(ctx: Context, existing: string): void {
+  let pid: unknown;
+  let startedAt: unknown;
+  try {
+    ({ pid, startedAt } = JSON.parse(existing));
+  } catch {
+    throw new WowaddonError(
+      "LOCKED",
+      `Invalid lock file: ${lockPath(ctx)}. Check for a running wowaddon process before removing it.`,
+    );
+  }
+  if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0)
+    throw new WowaddonError("LOCKED", "Invalid wowaddon lock PID.");
+  const expired =
+    typeof startedAt === "number" &&
+    Number.isFinite(startedAt) &&
+    Date.now() - startedAt > LOCK_MAX_AGE_MS;
+  if (!expired && processAlive(pid))
+    throw new WowaddonError(
+      "LOCKED",
+      `Another wowaddon operation is running (PID ${pid}). If it is not, remove ${lockPath(ctx)}.`,
+    );
+}
 export async function withInstallLock<T>(
   ctx: Context,
   work: (state: State) => Promise<T>,
 ): Promise<T> {
   await mkdir(dirname(lockPath(ctx)), { recursive: true });
-  const token = JSON.stringify({ pid: process.pid, token: crypto.randomUUID() });
-  let acquired = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const token = JSON.stringify({
+    pid: process.pid,
+    token: crypto.randomUUID(),
+    startedAt: Date.now(),
+  });
+  // Every reclaim is followed by another attempt, so the last stale lock is never left unretried.
+  let acquired = await tryLock(ctx, token);
+  for (let attempt = 0; !acquired && attempt < 3; attempt++) {
+    let existing: string | undefined;
     try {
-      const lock = await open(lockPath(ctx), "wx", 0o600);
-      try {
-        await lock.writeFile(token);
-        await lock.sync();
-      } finally {
-        await lock.close();
-      }
-      acquired = true;
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let existing: string;
-      try {
-        existing = await readFile(lockPath(ctx), "utf8");
-      } catch (readError) {
-        if (isMissing(readError)) continue;
-        throw readError;
-      }
-      let pid: number;
-      try {
-        pid = JSON.parse(existing).pid;
-      } catch {
-        throw new WowaddonError(
-          "LOCKED",
-          `Invalid lock file: ${lockPath(ctx)}. Check for a running wowaddon process before removing it.`,
-        );
-      }
-      if (!Number.isSafeInteger(pid) || pid <= 0)
-        throw new WowaddonError("LOCKED", "Invalid wowaddon lock PID.");
-      try {
-        process.kill(pid, 0);
-        throw new WowaddonError("LOCKED", `Another wowaddon operation is running (PID ${pid}).`);
-      } catch (probe) {
-        if ((probe as NodeJS.ErrnoException).code !== "ESRCH") throw probe;
-      }
+      existing = await readFile(lockPath(ctx), "utf8");
+    } catch (readError) {
+      if (!isMissing(readError)) throw readError;
+    }
+    if (existing !== undefined) {
+      assertStale(ctx, existing);
       await reclaimLock(ctx, existing);
     }
+    acquired = await tryLock(ctx, token);
   }
   if (!acquired) throw new WowaddonError("LOCKED", "Could not acquire the wowaddon lock.");
   try {
@@ -265,22 +297,25 @@ async function rollback(ctx: Context, pending: Pending): Promise<void> {
     const target = join(ctx.addonsDir, operation.folder);
     const backup = join(pending.txDir, "old", operation.folder);
     const staged = join(pending.txDir, "new", operation.folder);
+    const hasBackup = !!(await info(backup));
+    const placedNew = !operation.hadOld && operation.putNew && !(await info(staged));
+    if (!hasBackup && !placedNew) {
+      if (operation.hadOld && !(await info(target)))
+        throw new WowaddonError(
+          "RECOVERY_BLOCKED",
+          `Missing original and backup for ${operation.folder}; preserve ${pending.txDir}.`,
+        );
+      // Nothing of this operation was moved, so there is nothing to undo and the folder is left
+      // alone, even if it has become protected since.
+      continue;
+    }
     if (await protectedFolder(ctx, operation.folder))
       throw new WowaddonError(
         "RECOVERY_BLOCKED",
         `Cannot recover protected folder ${operation.folder}; backups remain in ${pending.txDir}.`,
       );
-    if (await info(backup)) {
-      await rm(target, { recursive: true, force: true });
-      await rename(backup, target);
-    } else if (!operation.hadOld && operation.putNew && !(await info(staged))) {
-      await rm(target, { recursive: true, force: true });
-    } else if (operation.hadOld && !(await info(target))) {
-      throw new WowaddonError(
-        "RECOVERY_BLOCKED",
-        `Missing original and backup for ${operation.folder}; preserve ${pending.txDir}.`,
-      );
-    }
+    await rm(target, { recursive: true, force: true });
+    if (hasBackup) await rename(backup, target);
   }
   await writeState(ctx, pending.before);
   await rm(pendingPath(ctx));
@@ -478,6 +513,11 @@ export async function removeInstalled(
   opts: InstallOptions = {},
 ): Promise<void> {
   if (!state.addons[id]) return;
-  if (!(await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts)))
-    throw new WowaddonError("DEV_PROTECTED", "dev link, skipped");
+  if (await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts)) return;
+  // A dev-protected folder is never touched: stop tracking it and leave the folder as it is.
+  checkAbort(opts.signal);
+  const next = structuredClone(state);
+  delete next.addons[id];
+  await writeState(ctx, next);
+  state.addons = next.addons;
 }

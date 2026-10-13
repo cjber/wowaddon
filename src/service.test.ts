@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setFetch } from "./http";
 import { manifestPath } from "./manifest";
@@ -104,7 +104,10 @@ test("protected owned addon makes no metadata or download requests", async () =>
   await writeState(fixture.ctx, state);
   expect((await syncAddons(fixture.ctx, {}))[0].status).toBe("dev");
   expect((await listRows(fixture.ctx, { refresh: true }))[0].status).toBe("dev");
-  await expect(removeAddon(fixture.ctx, "a/b")).rejects.toMatchObject({ code: "DEV_PROTECTED" });
+  await removeAddon(fixture.ctx, "a/b");
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
 });
 test("cancelled mutation leaves manifest unchanged", async () => {
   const controller = new AbortController();

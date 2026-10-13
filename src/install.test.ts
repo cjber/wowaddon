@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { setFetch } from "./http";
 import {
   installAddon,
+  LOCK_MAX_AGE_MS,
   pendingPath,
   protectedFolder,
   removeInstalled,
@@ -266,14 +267,16 @@ test("remove deletes only owned folders", async () => {
   expect(await readdir(fixture.ctx.addonsDir)).toEqual(["Unrelated"]);
   expect((await readState(fixture.ctx)).addons).toEqual({});
 });
-test("remove refuses a dev folder and keeps ownership", async () => {
+test("remove stops tracking a dev folder and leaves the folder untouched", async () => {
   const path = await folder("Foo");
   await writeFile(join(path, ".git"), "gitdir: /dev");
   await own();
-  await expect(
-    withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, entry.id)),
-  ).rejects.toMatchObject({ code: "DEV_PROTECTED" });
-  expect(await readState(fixture.ctx)).toEqual(state);
+  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, entry.id));
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+  expect((await readdir(path)).sort()).toEqual([".git", "marker"]);
+  expect(await contents("Foo")).toBe("old");
+  expect(await readFile(join(path, ".git"), "utf8")).toBe("gitdir: /dev");
+  expect(await readdir(dirname(fixture.ctx.addonsDir))).toEqual(["AddOns"]);
 });
 test("live lock blocks, dead PID lock is recovered", async () => {
   const lock = join(fixture.ctx.configDir, "state/forever.lock");
@@ -284,6 +287,55 @@ test("live lock blocks, dead PID lock is recovered", async () => {
   });
   await writeFile(lock, JSON.stringify({ pid: 2147483647 }));
   await withInstallLock(fixture.ctx, async () => {});
+  expect(await readdir(dirname(lock))).not.toContain("forever.lock");
+});
+test("a lock held by another user's live process (EPERM) blocks", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  await writeFile(lock, JSON.stringify({ pid: 4242, startedAt: Date.now() }));
+  const kill = spyOn(process, "kill").mockImplementation(() => {
+    throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+  });
+  try {
+    await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+      code: "LOCKED",
+    });
+  } finally {
+    kill.mockRestore();
+  }
+  expect(await readFile(lock, "utf8")).toContain("4242");
+});
+test("a lock older than the maximum age is reclaimed even if its PID was reused", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  await writeFile(
+    lock,
+    JSON.stringify({ pid: process.pid, startedAt: Date.now() - LOCK_MAX_AGE_MS - 1000 }),
+  );
+  await withInstallLock(fixture.ctx, async () => {});
+  expect(await readdir(dirname(lock))).not.toContain("forever.lock");
+  await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+  await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+    code: "LOCKED",
+  });
+});
+test("reclaiming a stale lock is always followed by another attempt", async () => {
+  const lock = join(fixture.ctx.configDir, "state/forever.lock");
+  await mkdir(dirname(lock), { recursive: true });
+  const realOpen = fs.open;
+  let stale = 0;
+  // Three dead runs leave a lock just before each of the first three attempts.
+  const probe = spyOn(fs, "open").mockImplementation((async (path, ...rest) => {
+    if (path === lock && stale < 3)
+      await writeFile(lock, JSON.stringify({ pid: 2147483647, run: ++stale }));
+    return realOpen(path, ...rest);
+  }) as typeof fs.open);
+  try {
+    expect(await withInstallLock(fixture.ctx, async () => "ran")).toBe("ran");
+  } finally {
+    probe.mockRestore();
+  }
+  expect(stale).toBe(3);
   expect(await readdir(dirname(lock))).not.toContain("forever.lock");
 });
 test("corrupt pending record blocks mutations and never deletes outside staging", async () => {
@@ -325,6 +377,31 @@ test("cancellation after the first folder swap rolls back every change", async (
   expect(await contents("Foo")).toBe("old");
   expect(await contents("Bar")).toBe("old");
   expect(await readState(fixture.ctx)).toEqual(state);
+});
+test("a folder protected mid-install rolls back the swapped ones and is left untouched", async () => {
+  await folder("Foo");
+  const bar = await folder("Bar");
+  await own(["Foo", "Bar"]);
+  await download(["Foo", "Bar"]);
+  let calls = 0;
+  await expect(
+    withInstallLock(fixture.ctx, (current) =>
+      installAddon(fixture.ctx, current, entry, release, {
+        rename: async (from, to) => {
+          await rename(from, to);
+          // Foo has been swapped in; Bar becomes a checkout before its turn.
+          if (++calls === 2) await mkdir(join(bar, ".git"));
+        },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "DEV_PROTECTED" });
+  expect(calls).toBe(2);
+  expect(await contents("Foo")).toBe("old");
+  expect(await contents("Bar")).toBe("old");
+  expect((await readdir(bar)).sort()).toEqual([".git", "marker"]);
+  expect(await readState(fixture.ctx)).toEqual(state);
+  expect(await readdir(dirname(fixture.ctx.addonsDir))).toEqual(["AddOns"]);
+  expect(await readdir(dirname(pendingPath(fixture.ctx)))).not.toContain("forever.pending.json");
 });
 test("protection is rechecked after download before swap", async () => {
   const path = await folder("Foo");
