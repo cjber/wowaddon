@@ -9,6 +9,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  # Dependabot reads bun.lock up to lockfileVersion 3 (dependabot-core v0.400.0 and later);
+  # older updaters failed on our v2 lockfile with "Unsupported bun.lock 'lockfileVersion'".
+  # Before moving CI to a Bun that writes a newer lockfileVersion, check Dependabot reads it.
   - package-ecosystem: bun
     directory: /
     schedule:
