@@ -15,15 +15,15 @@
     "check": "bun run typecheck && bun run lint && bun test"
   },
   "dependencies": {
-    "@opentui/core": "0.4.5",
-    "@opentui/react": "0.4.5",
-    "@zip.js/zip.js": "2.18.2",
-    "react": "19.2.8"
+    "@opentui/core": "0.5.17",
+    "@opentui/react": "0.5.17",
+    "@zip.js/zip.js": "2.23.0",
+    "react": "19.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "@types/bun": "1.3.14",
-    "@types/react": "19.2.17",
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.2",
+    "@types/react": "19.3.0",
     "typescript": "7.0.2"
   }
 }
