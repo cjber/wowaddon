@@ -20,13 +20,13 @@ from pathlib import Path
 from typing import Any
 
 sys.dont_write_bytecode = True
-VERSION = "0.3.0"
+VERSION = "0.5.0"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 CONFIG = ".sift/sgconfig.yml"
 SCRIPT_TIMEOUT = 600.0
 BUILTIN_LENSES: frozenset[str] = frozenset(
     "comment-narration copy-slop dead-code defensive-noise oversized-modules parallel-implementations "  # noqa: SIM905 (a word list reads best as one string)
-    "reinvented-wheel session-residue silent-fallbacks speculative-abstraction stale-docs "
+    "reinvented-wheel session-residue shallow-modules silent-fallbacks speculative-abstraction stale-docs "
     "standards stringly-typed test-plumbing wall-of-text".split()
 )
 COMMENT_EXTENSIONS = {
