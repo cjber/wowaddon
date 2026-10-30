@@ -24,7 +24,7 @@ from urllib.parse import unquote, urlsplit
 
 sys.dont_write_bytecode = True
 
-VERSION = "0.3.0"
+VERSION = "0.5.0"
 MAX_BYTES = 32 * 1024
 NOTE_BYTES = 12 * 1024
 MAX_STANDARD_FILES = 1000
