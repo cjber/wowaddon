@@ -1,4 +1,5 @@
 ---
+
 name: sift-project
 description: "Project skill for sift in wowaddon: the exact quality-gate and evidence commands, live roots that must never be deleted as dead code, exclusions, conventions and risk order. Load before running sift or any code-quality, cleanup or dead-code work in this repository."
 ---
@@ -64,15 +65,15 @@ None.
 
 ## Zones
 
-| Path | Zone | Reason |
-|---|---|---|
-| `src/**/*.test.ts`, `src/**/*.test.tsx` | test | colocated `bun test` specs |
-| `src/testing/helpers.ts` | test | offline `fetch` stubs and zip builders shared by tests |
-| `src/testing/fixtures/` | fixture | recorded public API responses; never edited by cleanup |
-| `bin/` | script | launcher |
-| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig` | config | |
-| `README.md`, `CHANGELOG.md`, `addons.example.txt` | docs | |
-| `.sift/gate.py`, `.sift/agents.py`, `.sift/LICENSE` | vendor | copied byte for byte from sift |
+| Path                                                       | Zone    | Reason                                                 |
+| ---------------------------------------------------------- | ------- | ------------------------------------------------------ |
+| `src/**/*.test.ts`, `src/**/*.test.tsx`                    | test    | colocated `bun test` specs                             |
+| `src/testing/helpers.ts`                                   | test    | offline `fetch` stubs and zip builders shared by tests |
+| `src/testing/fixtures/`                                    | fixture | recorded public API responses; never edited by cleanup |
+| `bin/`                                                     | script  | launcher                                               |
+| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig` | config  |                                                        |
+| `README.md`, `CHANGELOG.md`, `addons.example.txt`          | docs    |                                                        |
+| `.sift/gate.py`, `.sift/agents.py`, `.sift/LICENSE`        | vendor  | copied byte for byte from sift                         |
 
 ## Conventions
 

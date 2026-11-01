@@ -37,17 +37,17 @@ Ctrl+C.
 
 Runs when both stdin and stdout are a terminal and no subcommand is given.
 
-| Key         | Action                                                   |
-|-------------|-----------------------------------------------------------|
-| `↑`/`k`, `↓`/`j` | move the selection                                    |
-| `u`         | update the selected addon, or take over an unmanaged one |
-| `U`         | update everything                                        |
-| `a`         | add an addon — paste a ref or URL, `Enter` installs      |
-| `x`         | remove the selected addon (`y` to confirm)               |
-| `f`         | cycle flavor (era / forever)                             |
-| `r`         | refresh latest versions                                  |
-| `?`         | help                                                      |
-| `q`, `Ctrl+C` | quit                                                    |
+| Key              | Action                                                   |
+| ---------------- | -------------------------------------------------------- |
+| `↑`/`k`, `↓`/`j` | move the selection                                       |
+| `u`              | update the selected addon, or take over an unmanaged one |
+| `U`              | update everything                                        |
+| `a`              | add an addon — paste a ref or URL, `Enter` installs      |
+| `x`              | remove the selected addon (`y` to confirm)               |
+| `f`              | cycle flavor (era / forever)                             |
+| `r`              | refresh latest versions                                  |
+| `?`              | help                                                     |
+| `q`, `Ctrl+C`    | quit                                                     |
 
 No borders, no colour overrides beyond the terminal's own dim/bold — it should look like it
 belongs on your machine, not like a dashboard.
@@ -60,11 +60,11 @@ manifest and installed-state file.
 
 ## Sources
 
-| kind   | ref                                    | from                                          |
-|--------|-----------------------------------------|------------------------------------------------|
-| `gh`   | `OWNER/REPO`                            | newest compatible GitHub release, or the source archive if none ships a zip |
-| `cf`   | numeric id or slug                      | CurseForge, no API key needed                 |
-| `wowi` | file id                                 | WoWInterface                                  |
+| kind   | ref                | from                                                                        |
+| ------ | ------------------ | --------------------------------------------------------------------------- |
+| `gh`   | `OWNER/REPO`       | newest compatible GitHub release, or the source archive if none ships a zip |
+| `cf`   | numeric id or slug | CurseForge, no API key needed                                               |
+| `wowi` | file id            | WoWInterface                                                                |
 
 `add` also accepts a pasted URL: a `github.com/OWNER/REPO` link, a
 `curseforge.com/wow/addons/<slug>` link (with or without `/files/<id>`), or a
