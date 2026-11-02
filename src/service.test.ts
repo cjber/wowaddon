@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
 import { setFetch } from "./http";
 import { manifestPath } from "./manifest";
 import { addAddon, listRows, removeAddon, syncAddons } from "./service";
@@ -82,7 +83,7 @@ test("add, local list, unchanged sync, and remove use the service contract", asy
   expect(progress.map((p) => p.phase)).toEqual(["resolving", "downloading", "installing", "done"]);
   expect((await listRows(fixture.ctx, { refresh: false }))[0].status).toBe("unknown");
   expect(calls).toHaveLength(2);
-  expect((await syncAddons(fixture.ctx, { ids: ["https://github.com/A/B"] }))[0].message).toBe(
+  expect((await syncAddons(fixture.ctx, { ids: ["https://github.com/A/B"] })).rows[0].message).toBe(
     "up to date",
   );
   expect(calls).toHaveLength(3);
@@ -94,7 +95,7 @@ test("unmanaged status supports a subsequent adopt", async () => {
   await mkdir(join(fixture.ctx.addonsDir, "Foo"));
   await installRoutes();
   expect((await addAddon(fixture.ctx, "a/b", { install: true })).status).toBe("unmanaged");
-  expect((await syncAddons(fixture.ctx, { adopt: true }))[0].status).toBe("current");
+  expect((await syncAddons(fixture.ctx, { adopt: true })).rows[0].status).toBe("current");
 });
 test("protected owned addon makes no metadata or download requests", async () => {
   await addAddon(fixture.ctx, "a/b", { install: false });
@@ -102,7 +103,7 @@ test("protected owned addon makes no metadata or download requests", async () =>
   const state = await readState(fixture.ctx);
   state.addons["gh:a/b"] = { version: "v1", versionKey: "1", installedAt: "now", folders: ["Foo"] };
   await writeState(fixture.ctx, state);
-  expect((await syncAddons(fixture.ctx, {}))[0].status).toBe("dev");
+  expect((await syncAddons(fixture.ctx, {})).rows[0].status).toBe("dev");
   expect((await listRows(fixture.ctx, { refresh: true }))[0].status).toBe("dev");
   await removeAddon(fixture.ctx, "a/b");
   expect((await readState(fixture.ctx)).addons).toEqual({});
@@ -188,8 +189,8 @@ test("unresolved CF rows do not block refresh, sync, add or remove of other entr
     message: "Couldn't resolve that CurseForge name — paste the project URL or its numeric ID",
   });
   expect(refreshed[1].latest?.version).toBe("v1");
-  expect((await syncAddons(fixture.ctx, { ids: ["a/b"] }))[0].status).toBe("current");
-  expect((await syncAddons(fixture.ctx, {})).map((row) => row.status)).toEqual([
+  expect((await syncAddons(fixture.ctx, { ids: ["a/b"] })).rows[0].status).toBe("current");
+  expect((await syncAddons(fixture.ctx, {})).rows.map((row) => row.status)).toEqual([
     "error",
     "current",
   ]);
@@ -221,4 +222,83 @@ test("cancelled removal leaves the manifest and installed folders intact", async
   ).rejects.toMatchObject({ code: "ABORTED" });
   expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
   expect(await readFile(join(fixture.ctx.addonsDir, "Foo/init.lua"), "utf8")).toBe("x");
+});
+
+test("a symlinked dev folder named after the repo is dev with no state record", async () => {
+  await addAddon(fixture.ctx, "questie/questietrace", { install: false });
+  await symlink(join(fixture.root, "checkout"), join(fixture.ctx.addonsDir, "QuestieTrace"));
+  expect((await listRows(fixture.ctx, { refresh: false }))[0].status).toBe("dev");
+  expect((await listRows(fixture.ctx, { refresh: true }))[0].status).toBe("dev");
+  expect((await syncAddons(fixture.ctx, {})).rows[0].status).toBe("dev");
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+});
+
+test("dry runs report the change and leave manifest, state and folders alone", async () => {
+  const calls = await installRoutes();
+  const added = await addAddon(fixture.ctx, "a/b", { install: true, dryRun: true });
+  expect(added).toMatchObject({ status: "missing", latest: { version: "v1" } });
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
+  expect(calls).toHaveLength(1);
+  await addAddon(fixture.ctx, "a/b", { install: true });
+  const before = await readState(fixture.ctx);
+  const removal = await removeAddon(fixture.ctx, "a/b", { dryRun: true });
+  expect(removal).toMatchObject({ entry: { id: "gh:a/b" }, deleted: true });
+  expect(await readState(fixture.ctx)).toEqual(before);
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+  expect(await readFile(join(fixture.ctx.addonsDir, "Foo/init.lua"), "utf8")).toBe("x");
+  expect((await removeAddon(fixture.ctx, "a/b")).deleted).toBe(true);
+});
+
+test("sync snapshots WTF once before its first change and keeps the newest backups", async () => {
+  const wtf = join(fixture.root, "WTF");
+  await mkdir(join(wtf, "Account/ME/SavedVariables"), { recursive: true });
+  await writeFile(join(wtf, "Config.wtf"), "SET a 1");
+  await writeFile(join(wtf, "Account/ME/SavedVariables/Foo.lua"), "Foo = {}");
+  await writeFile(manifestPath(fixture.ctx), "gh a/b\n");
+  await installRoutes();
+  fixture.ctx.backups.keep = 2;
+  const backups = fixture.ctx.backups.dir;
+  expect(backups).toBe(join(fixture.root, ".local/state/wowaddon/backups/forever"));
+  const first = await syncAddons(fixture.ctx, {});
+  expect(first.rows[0].status).toBe("current");
+  expect(first.backup).toStartWith(join(backups, "WTF-"));
+  const entries = await new ZipReader(
+    new Uint8ArrayReader(await readFile(first.backup ?? "")),
+  ).getEntries();
+  expect(entries.map((entry) => entry.filename).sort()).toEqual([
+    "WTF/Account/ME/SavedVariables/Foo.lua",
+    "WTF/Config.wtf",
+  ]);
+  // Up to date: nothing changes, so nothing is backed up.
+  expect((await syncAddons(fixture.ctx, {})).backup).toBeUndefined();
+  for (const name of ["WTF-2000-01-01T00-00-00-000Z.zip", "WTF-2000-01-02T00-00-00-000Z.zip"])
+    await writeFile(join(backups, name), "old");
+  await removeAddon(fixture.ctx, "a/b");
+  await addAddon(fixture.ctx, "a/b", { install: false });
+  const second = await syncAddons(fixture.ctx, {});
+  expect((await readdir(backups)).sort()).toEqual(
+    [first.backup, second.backup].map((path) => basename(path ?? "")).sort(),
+  );
+  await removeAddon(fixture.ctx, "a/b");
+  await addAddon(fixture.ctx, "a/b", { install: false });
+  const skipped = await syncAddons(fixture.ctx, { backup: false });
+  expect(skipped.rows[0].status).toBe("current");
+  expect(skipped.backup).toBeUndefined();
+  expect(await readdir(backups)).toHaveLength(2);
+});
+
+test("a failed WTF backup fails every install and changes nothing", async () => {
+  await mkdir(join(fixture.root, "WTF"));
+  await writeFile(join(fixture.root, ".local"), "a file where the state directory should be");
+  await writeFile(manifestPath(fixture.ctx), "gh a/b\n");
+  await installRoutes();
+  const result = await syncAddons(fixture.ctx, {});
+  expect(result.rows[0]).toMatchObject({ status: "error", code: "BACKUP_FAILED" });
+  expect(result.backup).toBeUndefined();
+  expect(await readdir(fixture.ctx.addonsDir)).toEqual([]);
+});
+
+test("a bare name finds the one manifest entry with that ref, offline", async () => {
+  await writeFile(manifestPath(fixture.ctx), "tukui elvui\ngh a/b\n");
+  expect((await removeAddon(fixture.ctx, "ElvUI", { dryRun: true })).entry.id).toBe("tukui:elvui");
 });

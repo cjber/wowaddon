@@ -1,7 +1,13 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Context, Flavor, Row } from "./types";
+import { type Context, type Flavor, type Row, WowaddonError } from "./types";
 
-const context: Context = { flavor: "era", addonsDir: "/addons", configDir: "/config", notices: [] };
+const context: Context = {
+  flavor: "era",
+  addonsDir: "/addons",
+  configDir: "/config",
+  backups: { dir: "/backups", keep: 5 },
+  notices: [],
+};
 
 const openContextMock = mock(
   async (_opts: { flavor?: Flavor; addonsDir?: string; env?: NodeJS.ProcessEnv }) => context,
@@ -19,11 +25,15 @@ const addAddonMock = mock(
 const syncAddonsMock = mock(
   async (
     _ctx: Context,
-    _opts: { ids?: string[]; adopt?: boolean; signal?: AbortSignal },
-  ): Promise<Row[]> => [],
+    _opts: { ids?: string[]; adopt?: boolean; backup?: boolean; signal?: AbortSignal },
+  ): Promise<{ rows: Row[]; backup?: string }> => ({ rows: [] }),
 );
 const removeAddonMock = mock(
-  async (_ctx: Context, _id: string, _opts?: { signal?: AbortSignal }) => {},
+  async (_ctx: Context, _id: string, _opts?: { dryRun?: boolean; signal?: AbortSignal }) => ({
+    entry: okRow().entry,
+    installed: okRow().installed,
+    deleted: true,
+  }),
 );
 const parseRefMock = mock((_input: string) => ({ kind: "gh" as const, ref: "owner/repo" }));
 
@@ -89,8 +99,12 @@ beforeEach(() => {
   openContextMock.mockImplementation(async () => context);
   listRowsMock.mockImplementation(async () => []);
   addAddonMock.mockImplementation(async () => okRow());
-  syncAddonsMock.mockImplementation(async () => []);
-  removeAddonMock.mockImplementation(async () => {});
+  syncAddonsMock.mockImplementation(async () => ({ rows: [] }));
+  removeAddonMock.mockImplementation(async () => ({
+    entry: okRow().entry,
+    installed: okRow().installed,
+    deleted: true,
+  }));
 });
 
 afterEach(() => {
@@ -125,14 +139,14 @@ describe("global flags", () => {
 
 describe("sync", () => {
   test("prints OK lines and exits 0 on success", async () => {
-    syncAddonsMock.mockImplementation(async () => [okRow()]);
+    syncAddonsMock.mockImplementation(async () => ({ rows: [okRow()] }));
     const code = await runCli(["sync"]);
     expect(code).toBe(0);
     expect(logs[0]).toBe("OK   cf:6124 Auctionator 11.0.3");
   });
 
   test("exits 1 when any row failed", async () => {
-    syncAddonsMock.mockImplementation(async () => [okRow(), errorRow()]);
+    syncAddonsMock.mockImplementation(async () => ({ rows: [okRow(), errorRow()] }));
     const code = await runCli(["sync"]);
     expect(code).toBe(1);
     expect(logs.some((l) => l.startsWith("FAIL"))).toBe(true);
@@ -146,13 +160,15 @@ describe("sync", () => {
   });
 
   test("a dev-link skip still exits 0", async () => {
-    syncAddonsMock.mockImplementation(async () => [
-      {
-        entry: { id: "gh:a/b", kind: "gh", ref: "a/b" },
-        status: "dev",
-        message: "dev link, skipped",
-      },
-    ]);
+    syncAddonsMock.mockImplementation(async () => ({
+      rows: [
+        {
+          entry: { id: "gh:a/b", kind: "gh", ref: "a/b" },
+          status: "dev",
+          message: "dev link, skipped",
+        },
+      ],
+    }));
     const code = await runCli(["sync"]);
     expect(code).toBe(0);
     expect(logs[0]).toBe("SKIP gh:a/b dev link, skipped");
@@ -215,17 +231,117 @@ describe("list", () => {
     expect(logs[0]).toContain("cf:6124");
   });
 
-  test("--json prints the row array", async () => {
+  test("--json prints one envelope with the rows", async () => {
     listRowsMock.mockImplementation(async () => [okRow()]);
-    await runCli(["list", "--json"]);
-    const parsed = JSON.parse(logs[0]);
-    expect(parsed[0].entry.id).toBe("cf:6124");
+    expect(await runCli(["list", "--json"])).toBe(0);
+    expect(logs).toHaveLength(1);
+    expect(JSON.parse(logs[0])).toEqual({
+      schemaVersion: 1,
+      command: "list",
+      flavor: "era",
+      addonsDir: "/addons",
+      addons: [okRow()],
+    });
   });
 
   test("--refresh is forwarded", async () => {
     await runCli(["list", "--refresh"]);
     const call = listRowsMock.mock.calls[0][1] as { refresh: boolean };
     expect(call.refresh).toBe(true);
+  });
+});
+
+describe("check and dry runs", () => {
+  const update = okRow({
+    status: "update",
+    latest: { version: "12", versionKey: "2", url: "https://x", archive: "package" },
+  });
+
+  test("check refreshes, lists only what is not current and counts updates", async () => {
+    listRowsMock.mockImplementation(async () => [okRow(), update]);
+    expect(await runCli(["check"])).toBe(0);
+    expect(listRowsMock.mock.calls[0][1]).toMatchObject({ refresh: true, ids: [] });
+    expect(logs).toEqual(["UPDATE    cf:6124 Auctionator 11.0.3 -> 12"]);
+    await runCli(["check", "--json"]);
+    expect(JSON.parse(logs[1])).toMatchObject({ command: "check", updates: 1 });
+  });
+
+  test("check says when everything is current", async () => {
+    listRowsMock.mockImplementation(async () => [okRow()]);
+    await runCli(["check"]);
+    expect(logs).toEqual(["all 1 addons are current"]);
+  });
+
+  test("sync --dry-run previews the selected ids without syncing", async () => {
+    listRowsMock.mockImplementation(async () => [update]);
+    expect(await runCli(["sync", "cf:6124", "--dry-run", "--json"])).toBe(0);
+    expect(syncAddonsMock).not.toHaveBeenCalled();
+    expect(listRowsMock.mock.calls[0][1]).toMatchObject({ refresh: true, ids: ["cf:6124"] });
+    expect(JSON.parse(logs[0])).toMatchObject({ dryRun: true, backup: null, addons: [update] });
+  });
+
+  test("sync reports its backup and --no-backup turns it off", async () => {
+    syncAddonsMock.mockImplementation(async () => ({ rows: [okRow()], backup: "/b/WTF.zip" }));
+    await runCli(["sync", "--json"]);
+    expect(JSON.parse(logs[0])).toMatchObject({ dryRun: false, backup: "/b/WTF.zip" });
+    expect(errs).toContain("Backed up WTF to /b/WTF.zip");
+    expect(syncAddonsMock.mock.calls[0][1].backup).toBe(true);
+    await runCli(["sync", "--no-backup"]);
+    expect(syncAddonsMock.mock.calls[1][1].backup).toBe(false);
+  });
+
+  test("add and remove forward --dry-run", async () => {
+    await runCli(["add", "owner/repo", "--dry-run"]);
+    expect(addAddonMock.mock.calls[0][2]).toMatchObject({ dryRun: true, install: true });
+    removeAddonMock.mockImplementation(async () => ({
+      entry: okRow().entry,
+      installed: okRow().installed,
+      deleted: false,
+    }));
+    await runCli(["remove", "cf:6124", "--dry-run"]);
+    expect(removeAddonMock.mock.calls[0][2]?.dryRun).toBe(true);
+    expect(logs[1]).toBe("WOULD remove cf:6124; Auctionator stays (dev link)");
+  });
+});
+
+describe("schema and JSON errors", () => {
+  test("schema describes every command, the statuses and the exit codes", async () => {
+    expect(await runCli(["schema"])).toBe(0);
+    const doc = JSON.parse(logs.join("\n"));
+    expect(Object.keys(doc.commands)).toEqual(["sync", "check", "add", "remove", "list", "schema"]);
+    expect(doc.commands.sync.usage).toBe(
+      "wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]",
+    );
+    expect(doc.exitCodes.locked.code).toBe(3);
+    expect(Object.keys(doc.statuses)).toContain("dev");
+    expect(openContextMock).not.toHaveBeenCalled();
+  });
+
+  test("help lists the new commands", async () => {
+    await runCli(["--help"]);
+    expect(logs.join("\n")).toContain("wowaddon check [<id|ref>...]");
+  });
+
+  test("a typed error becomes a JSON error with its code", async () => {
+    syncAddonsMock.mockImplementation(async () => {
+      throw new WowaddonError("LOCKED", "Another wowaddon operation is running.");
+    });
+    expect(await runCli(["sync", "--json"])).toBe(3);
+    expect(JSON.parse(logs[0])).toEqual({
+      schemaVersion: 1,
+      command: "sync",
+      error: { code: "LOCKED", message: "Another wowaddon operation is running." },
+    });
+  });
+
+  test("usage and config errors are JSON with exit 2", async () => {
+    expect(await runCli(["list", "--bogus", "--json"])).toBe(2);
+    expect(JSON.parse(logs[0]).error.code).toBe("USAGE");
+    openContextMock.mockImplementation(async () => {
+      throw new WowaddonError("CONFIG_MISSING", "No AddOns directory found.");
+    });
+    expect(await runCli(["--json", "list"])).toBe(2);
+    expect(JSON.parse(logs[1]).error.code).toBe("CONFIG_MISSING");
   });
 });
 
@@ -268,7 +384,7 @@ describe("TTY dispatch", () => {
     Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
     Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
     try {
-      syncAddonsMock.mockImplementation(async () => [okRow()]);
+      syncAddonsMock.mockImplementation(async () => ({ rows: [okRow()] }));
       expect(await runCli([])).toBe(0);
       expect(syncAddonsMock).toHaveBeenCalledTimes(1);
     } finally {

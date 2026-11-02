@@ -6,6 +6,7 @@ export const flavors: Record<
     name: string;
     clientDir: string;
     cfType: number;
+    wagoGame: string;
     version: RegExp;
     interfaces: (n: number) => boolean;
     tokens: string[];
@@ -15,6 +16,7 @@ export const flavors: Record<
     name: "Classic Era",
     clientDir: "_classic_era_",
     cfType: 67408,
+    wagoGame: "classic",
     version: /^1\.(13|14|15)(?:\.|$)/,
     interfaces: (n) => n >= 11300 && n < 11600,
     tokens: ["era", "classic", "vanilla", "standard"],
@@ -23,6 +25,7 @@ export const flavors: Record<
     name: "Forever",
     clientDir: "_forever_",
     cfType: 88568,
+    wagoGame: "forever",
     version: /^1\.60(?:\.|$)/,
     interfaces: (n) => n >= 16000 && n < 16100,
     tokens: ["forever", "camelot"],

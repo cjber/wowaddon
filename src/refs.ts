@@ -3,7 +3,7 @@ import { type SourceKind, WowaddonError } from "./types";
 function invalid(): never {
   throw new WowaddonError(
     "INVALID_REF",
-    "Unrecognised addon reference. Try OWNER/REPO, cf:6124, or wowi:12345.",
+    "Unrecognised addon reference. Try OWNER/REPO, cf:6124, wowi:12345, tukui:elvui or wago:<slug>.",
   );
 }
 function checked(kind: SourceKind, ref: string): { kind: SourceKind; ref: string } {
@@ -11,6 +11,10 @@ function checked(kind: SourceKind, ref: string): { kind: SourceKind; ref: string
     ref = ref.replace(/\.git$/i, "");
     if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\/[a-z0-9_.-]+$/i.test(ref) || /\/(?:\.|\.\.)$/.test(ref))
       invalid();
+    return { kind, ref: ref.toLowerCase() };
+  }
+  if (kind === "tukui" || kind === "wago") {
+    if (!/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(ref)) invalid();
     return { kind, ref: ref.toLowerCase() };
   }
   if (/^\d+$/.test(ref)) {
@@ -24,11 +28,13 @@ function checked(kind: SourceKind, ref: string): { kind: SourceKind; ref: string
 }
 export function parseRef(input: string): { kind: SourceKind; ref: string } {
   const text = input.trim();
-  const explicit = /^(gh|cf|wowi)(?:\s+|:)(.+)$/i.exec(text);
+  const explicit = /^(gh|cf|wowi|tukui|wago)(?:\s+|:)(.+)$/i.exec(text);
   if (explicit) return checked(explicit[1].toLowerCase() as SourceKind, explicit[2].trim());
   if (
     /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ||
-    /^(?:www\.)?(?:github|curseforge|wowinterface)\.com\//i.test(text)
+    /^(?:(?:www\.)?(?:github\.com|curseforge\.com|wowinterface\.com|tukui\.org)|addons\.wago\.io)\//i.test(
+      text,
+    )
   ) {
     let url: URL;
     try {
@@ -52,6 +58,14 @@ export function parseRef(input: string): { kind: SourceKind; ref: string } {
       if (match) return checked("wowi", match[1]);
       if (/^\/(?:downloads\/)?fileinfo\.php$/.test(url.pathname))
         return checked("wowi", url.searchParams.get("id") ?? "");
+    }
+    if (host === "addons.wago.io") {
+      const match = /^\/addons\/([^/]+)\/?$/.exec(url.pathname);
+      if (match) return checked("wago", match[1]);
+    }
+    if (host === "tukui.org" || host === "www.tukui.org") {
+      const match = /^\/([^/]+)\/?$/.exec(url.pathname);
+      if (match) return checked("tukui", match[1]);
     }
     return invalid();
   }

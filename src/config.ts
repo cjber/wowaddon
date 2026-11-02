@@ -44,7 +44,9 @@ export async function discoverAddons(home: string, flavor: Flavor): Promise<stri
 interface Config {
   defaultFlavor?: Flavor;
   addonsDir?: Partial<Record<Flavor, string>>;
+  backupKeep?: number;
 }
+const DEFAULT_BACKUP_KEEP = 5;
 async function readConfig(path: string): Promise<Config> {
   let text: string;
   try {
@@ -68,6 +70,11 @@ async function readConfig(path: string): Promise<Config> {
         typeof data.addonsDir !== "object" ||
         Array.isArray(data.addonsDir) ||
         Object.values(data.addonsDir).some((v) => typeof v !== "string" || !v.trim()))
+    )
+      throw new Error();
+    if (
+      data.backupKeep !== undefined &&
+      (!Number.isSafeInteger(data.backupKeep) || data.backupKeep < 0)
     )
       throw new Error();
     return data;
@@ -134,7 +141,20 @@ export async function openContext(opts: {
   } catch (error) {
     if (!isMissing(error) && (error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }
-  const ctx: Context = { flavor, addonsDir, configDir, notices };
+  const stateHome = resolve(
+    expandHome(env.XDG_STATE_HOME || join(home, ".local/state"), home),
+    "wowaddon",
+  );
+  const ctx: Context = {
+    flavor,
+    addonsDir,
+    configDir,
+    backups: {
+      dir: join(stateHome, "backups", flavor),
+      keep: config.backupKeep ?? DEFAULT_BACKUP_KEEP,
+    },
+    notices,
+  };
   environments.set(ctx, env);
   return ctx;
 }

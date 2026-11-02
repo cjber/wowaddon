@@ -11,6 +11,7 @@ const context = (flavor: Flavor = "era"): Context => ({
   flavor,
   addonsDir: `/${flavor}/AddOns`,
   configDir: "/config",
+  backups: { dir: "/backups", keep: 5 },
   notices: [],
 });
 const row = (name = "Foo", status: Row["status"] = "missing"): Row => ({
@@ -39,8 +40,8 @@ beforeEach(() => {
   open = spyOn(service, "openContext").mockImplementation(async (opts) => context(opts.flavor));
   list = spyOn(service, "listRows").mockResolvedValue([row()]);
   add = spyOn(service, "addAddon").mockResolvedValue(row("Added", "current"));
-  sync = spyOn(service, "syncAddons").mockResolvedValue([row("Foo", "current")]);
-  remove = spyOn(service, "removeAddon").mockResolvedValue(undefined);
+  sync = spyOn(service, "syncAddons").mockResolvedValue({ rows: [row("Foo", "current")] });
+  remove = spyOn(service, "removeAddon").mockResolvedValue({ entry: row().entry, deleted: true });
 });
 afterEach(async () => {
   await act(async () => {
@@ -92,7 +93,7 @@ test("Enter submits an add once and action keys cannot start concurrent mutation
 });
 
 test("repeated confirmation keys start only one removal", async () => {
-  const pending = deferred<void>();
+  const pending = deferred<service.Removal>();
   remove.mockReturnValue(pending.promise);
   await start();
   await press("x");
@@ -104,7 +105,7 @@ test("repeated confirmation keys start only one removal", async () => {
   await press("y");
   expect(remove).toHaveBeenCalledTimes(1);
   await act(async () => {
-    pending.resolve();
+    pending.resolve({ entry: row().entry, deleted: true });
   });
 });
 
@@ -218,7 +219,7 @@ test("Ctrl+C aborts an active add; q exits active sync with code zero", async ()
   await act(async () => {
     setup?.renderer.destroy();
   });
-  sync.mockReturnValue(deferred<Row[]>().promise);
+  sync.mockReturnValue(deferred<{ rows: Row[] }>().promise);
   await start();
   await press("u");
   await press("q");
@@ -254,7 +255,7 @@ test("40 addons fit in 100x24 with clipping indicators, footer and selected row 
 });
 
 test("Ctrl+C also aborts an active removal", async () => {
-  remove.mockReturnValue(deferred<void>().promise);
+  remove.mockReturnValue(deferred<service.Removal>().promise);
   await start();
   await press("x");
   await press("y");

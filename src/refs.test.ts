@@ -31,8 +31,22 @@ for (const input of [
 ])
   test(`WoWI ref: ${input}`, () => expect(parseRef(input)).toEqual({ kind: "wowi", ref: "123" }));
 for (const input of [
+  "tukui elvui",
+  "tukui:ElvUI",
+  "https://tukui.org/elvui",
+  "www.tukui.org/elvui/",
+])
+  test(`Tukui ref: ${input}`, () =>
+    expect(parseRef(input)).toEqual({ kind: "tukui", ref: "elvui" }));
+for (const input of ["wago details", "wago:Details", "https://addons.wago.io/addons/details"])
+  test(`Wago ref: ${input}`, () =>
+    expect(parseRef(input)).toEqual({ kind: "wago", ref: "details" }));
+for (const input of [
   "",
   "0",
+  "tukui:../x",
+  "wago:a/b",
+  "https://addons.wago.io.evil.test/addons/details",
   "cf:0",
   "wowi:slug",
   "x/y/z",
