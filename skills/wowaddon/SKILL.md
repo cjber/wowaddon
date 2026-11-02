@@ -14,7 +14,8 @@ code; read it once instead of parsing `--help`. Add `--flavor era|forever` whene
 client.
 
 1. Run `wowaddon check --json`. `updates` counts addons sync would install or update; rows with
-   status `error` carry a `code` and `message`.
+   status `error` carry a `code` and `message`. `check` mostly judges without downloading, so
+   `sync --dry-run` is the exact preview when a folder might be in the way.
 2. Before any change the user did not spell out, preview it with `--dry-run` on `sync`, `add` or
    `remove` and show the user what would change.
 3. Run the change: `wowaddon sync --json` (optionally with ids), `wowaddon add <ref|url> --json`
@@ -33,7 +34,8 @@ To find and install an addon:
    the flavor. `sources` names any source that was skipped or failed, and why.
 2. `wowaddon info <ref> --json` on the likely ones: summary, authors, downloads, last update,
    game versions, categories, links, folders and the latest changelog. Show the user the choice.
-3. `wowaddon add <ref> --json` with the `ref` exactly as search gave it, then check its row.
+3. `wowaddon add <ref> --json` with the `ref` exactly as search gave it, then check its row. A
+   failed add leaves the manifest alone, so rerun it once the cause is fixed.
 
 To take over addons installed by WowUp or by hand: `wowaddon adopt --dry-run --json`, show the
 `matches` (each with `matchedBy` and any `conflicts`) and `unmatched`, then `wowaddon adopt --json`

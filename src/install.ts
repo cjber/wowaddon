@@ -109,7 +109,17 @@ async function reclaimLock(ctx: Context, expected: string): Promise<void> {
 const projectKeys: Partial<Record<Entry["kind"], string>> = {
   cf: "X-Curse-Project-ID",
   wowi: "X-WoWI-ID",
+  wago: "X-Wago-ID",
 };
+const projectIdPattern = (entry: Entry) => {
+  const key = projectKeys[entry.kind];
+  return key ? new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im") : undefined;
+};
+async function tocOf(ctx: Context, folder: string): Promise<string | undefined> {
+  const dir = join(ctx.addonsDir, folder);
+  const file = (await readdir(dir).catch(() => [])).find((name) => tocMatchesFolder(name, folder));
+  return file && readFile(join(dir, file), "utf8").catch(() => undefined);
+}
 const folderKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
 // The folder name a source's own ref implies: QuestieTrace for gh questie/questietrace.
 function impliedFolder(entry: Entry): string | undefined {
@@ -120,20 +130,47 @@ function impliedFolder(entry: Entry): string | undefined {
 // A dev folder (symlink or checkout) named after this addon, or whose TOC carries its own project
 // ID: found before the first install, when state doesn't know the addon's folders yet.
 async function devFolderFor(ctx: Context, entry: Entry): Promise<string | undefined> {
-  const key = projectKeys[entry.kind];
   const name = impliedFolder(entry);
-  const id = key && new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im");
+  const id = projectIdPattern(entry);
   for (const item of await readdir(ctx.addonsDir, { withFileTypes: true })) {
     if (!safeFolder(item.name) || !(await protectedFolder(ctx, item.name))) continue;
     if (folderKey(item.name) === name) return item.name;
-    if (!id) continue;
-    const dir = join(ctx.addonsDir, item.name);
-    const files = await readdir(dir).catch(() => []);
-    for (const file of files)
-      if (tocMatchesFolder(file, item.name) && id.test(await readFile(join(dir, file), "utf8")))
-        return item.name;
+    if (id?.test((await tocOf(ctx, item.name)) ?? "")) return item.name;
   }
   return undefined;
+}
+// An AddOns folder no addon in state owns, with what is known without a download about whether
+// installing entry would land on it: its TOC carries entry's project ID (byId), or its name is the
+// one entry's ref or note implies (byName, only a guess).
+export interface ForeignFolder {
+  folder: string;
+  byId: boolean;
+  byName: boolean;
+}
+export async function foreignFolders(
+  ctx: Context,
+  state: State,
+  entry: Entry,
+): Promise<ForeignFolder[]> {
+  const owned = new Set(
+    Object.values(state.addons).flatMap((installed) =>
+      installed.folders.map((name) => name.toLowerCase()),
+    ),
+  );
+  const names = new Set([impliedFolder(entry), entry.note && folderKey(entry.note)]);
+  const id = projectIdPattern(entry);
+  const found: ForeignFolder[] = [];
+  for (const item of await readdir(ctx.addonsDir, { withFileTypes: true })) {
+    if (!item.isDirectory() && !item.isSymbolicLink()) continue;
+    if (!safeFolder(item.name) || /^blizzard_/i.test(item.name)) continue;
+    if (owned.has(item.name.toLowerCase())) continue;
+    found.push({
+      folder: item.name,
+      byId: !!id?.test((await tocOf(ctx, item.name)) ?? ""),
+      byName: names.has(folderKey(item.name)),
+    });
+  }
+  return found;
 }
 export async function isProtected(
   ctx: Context,
@@ -385,9 +422,13 @@ async function preflight(
   }
   return true;
 }
-const installFolders = (state: State, id: string, archive: Archive) => [
-  ...new Set([...(state.addons[id]?.folders ?? []), ...archive.folders]),
+const installFolders = (state: State, id: string, folders: string[]) => [
+  ...new Set([...(state.addons[id]?.folders ?? []), ...folders]),
 ];
+// What sync would say about installing id into these folders, short of the download: false for a
+// dev link, an UNMANAGED or other folder error thrown, true when nothing is in the way.
+export const foldersFree = (ctx: Context, state: State, id: string, folders: string[]) =>
+  preflight(ctx, state, id, installFolders(state, id, folders), false);
 async function transact(
   ctx: Context,
   state: State,
@@ -401,7 +442,7 @@ async function transact(
       "RECOVERY_BLOCKED",
       "An interrupted transaction still needs recovery; its backups have been preserved.",
     );
-  const folders = installFolders(state, id, archive);
+  const folders = installFolders(state, id, archive.folders);
   if (!(await preflight(ctx, state, id, folders, !!opts.adopt))) return false;
   checkAbort(opts.signal);
   const txDir = join(dirname(ctx.addonsDir), `.wowaddon-${crypto.randomUUID()}`);
@@ -513,7 +554,7 @@ export async function installAddon(
     signal: opts.signal,
   });
   if (opts.dryRun) {
-    const folders = installFolders(state, entry.id, archive);
+    const folders = installFolders(state, entry.id, archive.folders);
     if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt))) return skipDev();
     return {
       entry,

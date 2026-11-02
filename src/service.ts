@@ -6,7 +6,9 @@ import { checkAbort } from "./http";
 import {
   beginProtectionChecks,
   DEV_SKIPPED,
+  foldersFree,
   foldersPresent,
+  foreignFolders,
   type InstallOptions,
   installAddon,
   isProtected,
@@ -121,10 +123,48 @@ function failure(entry: Entry, state: State, error: unknown): Row {
     code: error instanceof WowaddonError ? error.code : "ERROR",
   };
 }
-// With refresh, each row's status is what sync would do judged from the latest release: install a
-// missing addon, update an outdated one, skip a dev link or leave a current one alone. Only a sync
-// dry run reads the download, so only it finds an unmanaged folder in the way. Nothing is written
-// but the CurseForge name cache.
+// Whether a missing addon's install would land on a folder wowaddon does not manage, as sync would
+// find it, decided by the cheapest evidence that settles it: no such folder at all, a folder whose
+// TOC carries the addon's project ID, then the folder list the source publishes for the addon. Only
+// a folder named like the addon that none of these settle costs the download a sync dry run makes.
+// A folder named unlike the addon and unknown to the source is missed.
+async function blockedRow(
+  ctx: Context,
+  state: State,
+  row: Row,
+  signal?: AbortSignal,
+): Promise<Row> {
+  const { entry, latest: release } = row;
+  const foreign = await foreignFolders(ctx, state, entry);
+  if (!foreign.length || !release) return row;
+  let folders = foreign.filter((item) => item.byId).map((item) => item.folder);
+  if (!folders.length) {
+    const known = await knownFolders(ctx, entry, signal);
+    if (!known.length) {
+      if (!foreign.some((item) => item.byName)) return row;
+      return installAddon(ctx, state, entry, release, { dryRun: true, signal });
+    }
+    folders = foreign
+      .filter((item) => known.includes(item.folder.toLowerCase()))
+      .map((item) => item.folder);
+  }
+  if (await foldersFree(ctx, state, entry.id, folders)) return row;
+  return { ...row, status: "dev", message: DEV_SKIPPED };
+}
+// The folders a source lists for an addon's package, lower-cased; empty when it lists none or the
+// lookup fails. Wago lists none and its lookup needs the paid key, so it is not asked.
+async function knownFolders(ctx: Context, entry: Entry, signal?: AbortSignal): Promise<string[]> {
+  if (entry.kind === "wago") return [];
+  try {
+    return (await sourceInfo(ctx, entry.id, signal)).folders.map((name) => name.toLowerCase());
+  } catch {
+    checkAbort(signal);
+    return [];
+  }
+}
+// With refresh, each row's status is what sync would do: install a missing addon, update an
+// outdated one, skip a dev link, stop at an unmanaged folder or leave a current one alone. Nothing
+// is written but the CurseForge name cache.
 export async function listRows(
   ctx: Context,
   opts: { refresh: boolean; ids?: string[]; signal?: AbortSignal },
@@ -137,13 +177,16 @@ export async function listRows(
     checkAbort(opts.signal);
     try {
       if (errors.has(entry.id)) throw errors.get(entry.id);
+      const row = await statusRow(
+        ctx,
+        entry,
+        state.addons[entry.id],
+        opts.refresh ? () => latest(ctx, entry, opts.signal) : undefined,
+      );
       rows.push(
-        await statusRow(
-          ctx,
-          entry,
-          state.addons[entry.id],
-          opts.refresh ? () => latest(ctx, entry, opts.signal) : undefined,
-        ),
+        opts.refresh && row.status === "missing"
+          ? await blockedRow(ctx, state, row, opts.signal)
+          : row,
       );
     } catch (error) {
       rows.push(failure(entry, state, error));
@@ -220,19 +263,22 @@ export async function addAddon(
     if (manifest.some((other) => other.id === entry.id))
       throw new WowaddonError("DUPLICATE", `Addon already in manifest: ${entry.id}`);
     checkAbort(opts.signal);
-    // A dry run takes the same path as the real one and stops before the first write.
-    if (!opts.dryRun) await writeManifest(ctx, [...manifest, entry]);
-    if (!opts.install) return statusRow(ctx, entry, state.addons[entry.id]);
+    // All or nothing: the manifest gains the entry only once the add has succeeded (installed, a
+    // dev link left in place, or --no-install), so a failed add can simply be rerun. A dry run takes
+    // the same path and never writes. A manifest write that fails after an install leaves the
+    // folders recorded in state, and rerunning the add finds them current and writes the line.
+    const save = async (row: Row) => {
+      if (!opts.dryRun) await writeManifest(ctx, [...manifest, entry]);
+      return row;
+    };
+    if (!opts.install) return save(await statusRow(ctx, entry, state.addons[entry.id]));
     if (releaseError) {
       const row = failure(entry, state, releaseError);
       opts.onProgress?.({ id: entry.id, phase: "failed", message: row.message });
       return row;
     }
     const row = await syncEntry(ctx, state, entry, opts, release);
-    // Nothing was installed over a folder wowaddon does not manage, so the add is undone and
-    // rerunning it with --adopt works.
-    if (row.status === "unmanaged" && !opts.dryRun) await writeManifest(ctx, manifest);
-    return row;
+    return row.status === "current" || row.status === "dev" ? save(row) : row;
   });
 }
 async function findId(

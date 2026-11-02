@@ -16,7 +16,7 @@
     "format": "biome check --write .",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun test",
-    "gate": "bun run check && bun scripts/changelog.ts --check && python3 .sloppatrol/gate.py --base origin/main && python3 .sloppatrol/agents.py check",
+    "gate": "bun run check && bun run build && bun scripts/changelog.ts --check && python3 .sloppatrol/gate.py --base origin/main && python3 .sloppatrol/agents.py check",
     "build": "bun scripts/build.ts"
   },
   "dependencies": {
