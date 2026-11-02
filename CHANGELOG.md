@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-02
+
 ### Fixed
 
 - `check` reports a missing addon as `unmanaged`, or `dev` for a symlink or checkout, whenever
