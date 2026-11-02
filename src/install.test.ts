@@ -4,6 +4,7 @@ import { lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 
 import { dirname, join } from "node:path";
 import { setFetch } from "./http";
 import {
+  DEV_SKIPPED,
   installAddon,
   LOCK_MAX_AGE_MS,
   pendingPath,
@@ -99,7 +100,7 @@ for (const kind of ["symlink", "broken", "git-dir", "git-file"] as const)
       installAddon(fixture.ctx, current, entry, release),
     );
     expect(row.status).toBe("dev");
-    expect(row.message).toBe("dev link, skipped");
+    expect(row.message).toBe(DEV_SKIPPED);
     expect((await readState(fixture.ctx)).addons[entry.id].versionKey).toBe("1");
     if (kind === "symlink" || kind === "broken")
       expect((await lstat(target)).isSymbolicLink()).toBe(true);

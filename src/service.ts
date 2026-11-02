@@ -5,6 +5,7 @@ import { categories, discover, type Query, addonInfo as sourceInfo } from "./dis
 import { checkAbort } from "./http";
 import {
   beginProtectionChecks,
+  DEV_SKIPPED,
   foldersPresent,
   type InstallOptions,
   installAddon,
@@ -90,7 +91,7 @@ async function statusRow(
   release?: () => Promise<Release>,
 ): Promise<Row> {
   if (await isProtected(ctx, entry, installed))
-    return { entry, installed, status: "dev", message: "dev link, skipped" };
+    return { entry, installed, status: "dev", message: DEV_SKIPPED };
   const present = installed && (await foldersPresent(ctx, installed));
   if (!release) return { entry, installed, status: present ? "unknown" : "missing" };
   const resolved = await release();
@@ -120,9 +121,10 @@ function failure(entry: Entry, state: State, error: unknown): Row {
     code: error instanceof WowaddonError ? error.code : "ERROR",
   };
 }
-// With refresh, each row's status is what sync would do: install a missing addon, update an
-// outdated one, skip a dev link or leave a current one alone. Nothing is written but the CurseForge
-// name cache.
+// With refresh, each row's status is what sync would do judged from the latest release: install a
+// missing addon, update an outdated one, skip a dev link or leave a current one alone. Only a sync
+// dry run reads the download, so only it finds an unmanaged folder in the way. Nothing is written
+// but the CurseForge name cache.
 export async function listRows(
   ctx: Context,
   opts: { refresh: boolean; ids?: string[]; signal?: AbortSignal },
@@ -159,13 +161,8 @@ async function syncEntry(
   try {
     checkAbort(opts.signal);
     if (await isProtected(ctx, entry, state.addons[entry.id])) {
-      opts.onProgress?.({ id: entry.id, phase: "skipped", message: "dev link, skipped" });
-      return {
-        entry,
-        installed: state.addons[entry.id],
-        status: "dev",
-        message: "dev link, skipped",
-      };
+      opts.onProgress?.({ id: entry.id, phase: "skipped", message: DEV_SKIPPED });
+      return { entry, installed: state.addons[entry.id], status: "dev", message: DEV_SKIPPED };
     }
     opts.onProgress?.({ id: entry.id, phase: "resolving" });
     return await installAddon(
@@ -223,32 +220,19 @@ export async function addAddon(
     if (manifest.some((other) => other.id === entry.id))
       throw new WowaddonError("DUPLICATE", `Addon already in manifest: ${entry.id}`);
     checkAbort(opts.signal);
-    if (opts.dryRun) {
-      if (releaseError) return failure(entry, state, releaseError);
-      try {
-        return await statusRow(
-          ctx,
-          entry,
-          state.addons[entry.id],
-          opts.install ? async () => release ?? latest(ctx, entry, opts.signal) : undefined,
-        );
-      } catch (error) {
-        return failure(entry, state, error);
-      }
-    }
-    await writeManifest(ctx, [...manifest, entry]);
-    if (!opts.install)
-      return {
-        entry,
-        installed: state.addons[entry.id],
-        status: state.addons[entry.id] ? "unknown" : "missing",
-      };
+    // A dry run takes the same path as the real one and stops before the first write.
+    if (!opts.dryRun) await writeManifest(ctx, [...manifest, entry]);
+    if (!opts.install) return statusRow(ctx, entry, state.addons[entry.id]);
     if (releaseError) {
       const row = failure(entry, state, releaseError);
       opts.onProgress?.({ id: entry.id, phase: "failed", message: row.message });
       return row;
     }
-    return syncEntry(ctx, state, entry, opts, release);
+    const row = await syncEntry(ctx, state, entry, opts, release);
+    // Nothing was installed over a folder wowaddon does not manage, so the add is undone and
+    // rerunning it with --adopt works.
+    if (row.status === "unmanaged" && !opts.dryRun) await writeManifest(ctx, manifest);
+    return row;
   });
 }
 async function findId(
@@ -286,19 +270,20 @@ export async function syncAddons(
   opts: {
     ids?: string[];
     adopt?: boolean;
+    dryRun?: boolean;
     backup?: boolean;
     signal?: AbortSignal;
     onProgress?: (p: Progress) => void;
   },
 ): Promise<{ rows: Row[]; backup?: string }> {
-  return withInstallLock(ctx, async (state) => {
+  return withState(ctx, opts.dryRun, async (state) => {
     checkAbort(opts.signal);
     const { manifest, errors } = await entries(ctx, true, opts.signal);
     const selected = await select(ctx, manifest, opts.ids, opts.signal);
     // One WTF snapshot before the first change; if it fails, every install fails with it.
     let backup: Promise<string | undefined> | undefined;
     const beforeChange =
-      opts.backup === false
+      opts.backup === false || opts.dryRun
         ? undefined
         : async () => {
             backup ??= backupWtf(ctx);

@@ -375,11 +375,15 @@ describe("check and dry runs", () => {
     expect(logs).toEqual(["all 1 addons are current"]);
   });
 
-  test("sync --dry-run previews the selected ids without syncing", async () => {
-    listRowsMock.mockImplementation(async () => [update]);
-    expect(await runCli(["sync", "cf:6124", "--dry-run", "--json"])).toBe(0);
-    expect(syncAddonsMock).not.toHaveBeenCalled();
-    expect(listRowsMock.mock.calls[0][1]).toMatchObject({ refresh: true, ids: ["cf:6124"] });
+  test("sync --dry-run previews the selected ids through the sync path", async () => {
+    syncAddonsMock.mockImplementation(async () => ({ rows: [update] }));
+    expect(await runCli(["sync", "cf:6124", "--dry-run", "--adopt", "--json"])).toBe(0);
+    expect(listRowsMock).not.toHaveBeenCalled();
+    expect(syncAddonsMock.mock.calls[0][1]).toMatchObject({
+      ids: ["cf:6124"],
+      dryRun: true,
+      adopt: true,
+    });
     expect(JSON.parse(logs[0])).toMatchObject({ dryRun: true, backup: null, addons: [update] });
   });
 

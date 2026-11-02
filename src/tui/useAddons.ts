@@ -43,6 +43,9 @@ export class AddonActions {
   private workAbort?: AbortController;
   private searchAbort?: AbortController;
   private infoAbort?: AbortController;
+  // Adds stopped by an unmanaged folder: shown as rows but not in the manifest, so taking one over
+  // reruns its add with adopt instead of syncing it.
+  private unsavedAdds = new Map<string, { input: string; note?: string }>();
 
   constructor(
     private update: UpdateState,
@@ -94,6 +97,7 @@ export class AddonActions {
       const rows = await listRows(ctx, { refresh: false, signal: controller.signal });
       if (generation !== this.generation) return;
       this.ctx = ctx;
+      this.unsavedAdds.clear();
       this.update((state) =>
         setRows(
           {
@@ -124,7 +128,10 @@ export class AddonActions {
     this.refreshAbort = controller;
     try {
       const rows = await listRows(ctx, { refresh: true, signal: controller.signal });
-      if (generation === this.generation) this.update((state) => setRows(state, rows));
+      if (generation === this.generation) {
+        this.unsavedAdds.clear();
+        this.update((state) => setRows(state, rows));
+      }
     } catch {
       // Background refresh keeps the last known rows on failure.
     } finally {
@@ -158,10 +165,34 @@ export class AddonActions {
     });
   }
 
+  // Takes over an unmanaged row: a manifest addon syncs with adopt, an unsaved add reruns with it.
+  runAdopt(id: string) {
+    const unsaved = this.unsavedAdds.get(id);
+    if (!unsaved) return this.runSync([id], true);
+    return this.mutate(async (ctx, opts) => {
+      const row = await this.add(ctx, unsaved.input, unsaved.note, opts, true);
+      return (state) => setRows(setNotice(state, addNotice(row)), mergeRows(state.rows, [row]));
+    });
+  }
+
+  private async add(
+    ctx: Context,
+    input: string,
+    note: string | undefined,
+    opts: WorkOptions,
+    adopt = false,
+  ) {
+    const row = await addAddon(ctx, input, { ...opts, note, install: true, adopt });
+    if (row.status === "unmanaged") this.unsavedAdds.set(row.entry.id, { input, note });
+    else this.unsavedAdds.delete(row.entry.id);
+    return row;
+  }
+
   runAdd(input: string) {
     return this.mutate(async (ctx, opts) => {
-      const row = await addAddon(ctx, input, { ...opts, install: true });
-      return (state) => setRows(cancelAdd(state), mergeRows(state.rows, [row]));
+      const row = await this.add(ctx, input, undefined, opts);
+      return (state) =>
+        setRows(setNotice(cancelAdd(state), addNotice(row)), mergeRows(state.rows, [row]));
     });
   }
 
@@ -224,18 +255,15 @@ export class AddonActions {
 
   runInstall(listing: Listing) {
     return this.mutate(async (ctx, opts) => {
-      const row = await addAddon(ctx, listing.ref, { ...opts, note: listing.name, install: true });
-      return (state) =>
-        setRows(
-          setNotice(state, `installed ${listing.name} ${row.installed?.version ?? ""}`.trim()),
-          mergeRows(state.rows, [row]),
-        );
+      const row = await this.add(ctx, listing.ref, listing.name, opts);
+      return (state) => setRows(setNotice(state, addNotice(row)), mergeRows(state.rows, [row]));
     });
   }
 
   runRemove(id: string) {
     return this.mutate(async (ctx, opts) => {
-      await removeAddon(ctx, id, { signal: opts.signal });
+      // An unsaved add is only a row; there is nothing to remove from the manifest.
+      if (!this.unsavedAdds.delete(id)) await removeAddon(ctx, id, { signal: opts.signal });
       return (state) =>
         setRows(
           closeConfirm(state),
@@ -259,6 +287,14 @@ function mergeRows(existing: Row[], updated: Row[]): Row[] {
   const byId = new Map(existing.map((row) => [row.entry.id, row]));
   for (const row of updated) byId.set(row.entry.id, row);
   return [...byId.values()];
+}
+
+// What an add did, in words: an unmanaged folder is left in place until the user takes it over.
+function addNotice(row: Row): string {
+  const name = row.entry.note ?? row.entry.ref;
+  if (row.status === "current") return `installed ${name} ${row.installed?.version ?? ""}`.trim();
+  if (row.status === "unmanaged") return `${name} is installed outside wowaddon · u takes it over`;
+  return `${name}: ${row.message ?? row.status}`;
 }
 
 function message(error: unknown): string {

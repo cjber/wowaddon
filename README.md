@@ -49,9 +49,11 @@ wowaddon schema                        # commands, flags, JSON shapes and exit c
 Global options: `--flavor era|forever`, `--addons-dir PATH`, `--json`, `-h/--help`, `-V/--version`.
 
 Output is plain lines to stdout, progress to stderr: `OK cf:6124 Auctionator 11.0.3`,
-`SKIP gh:a/b dev link, skipped`, `FAIL gh:a/b <message>`. `--dry-run` resolves the latest
-releases and reports what would change, but downloads nothing and leaves the manifest, state and
-AddOns folder as they are.
+`SKIP gh:a/b dev link, skipped: ...`, `FAIL gh:a/b <message>`. `--dry-run` on `add` and `sync`
+downloads each release it would install and checks its folders, so it reports the status a real
+run would give, such as `unmanaged`, but leaves the manifest, state and AddOns folder as they are.
+An `add` stopped by an `unmanaged` folder leaves the manifest alone too, so rerunning it with
+`--adopt` takes the folder over.
 
 | Exit code | Meaning                                                 |
 | --------- | ------------------------------------------------------- |

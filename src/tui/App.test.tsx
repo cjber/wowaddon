@@ -328,6 +328,31 @@ test("browse loads trending once, groups by category and installs with one key",
   expect(find).toHaveBeenCalledTimes(1);
 });
 
+test("an install stopped by an unmanaged folder is taken over by rerunning the add with adopt", async () => {
+  add.mockImplementation(async (_ctx, ref, opts) => ({
+    ...row("Map0", opts.adopt ? "current" : "unmanaged"),
+    entry: { id: ref, kind: "cf", ref: ref.slice(3), note: "Map0" },
+  }));
+  list.mockResolvedValue([]);
+  await start();
+  await press("TAB");
+  await press("RETURN");
+  let output = await press("i");
+  expect(output).toContain("Map0 is installed outside wowaddon · u takes it over");
+  expect(output).not.toContain("installed Map0");
+  await press("TAB");
+  await press("u");
+  await press("y");
+  expect(sync).not.toHaveBeenCalled();
+  expect(add.mock.calls[1]).toMatchObject([
+    expect.anything(),
+    "cf:100",
+    { note: "Map0", install: true, adopt: true },
+  ]);
+  output = await frame();
+  expect(output).toContain("installed Map0");
+});
+
 test("/ searches by best match, o cycles the sort and h folds a group", async () => {
   await start();
   await press("TAB");

@@ -200,7 +200,8 @@ const statuses: Record<Row["status"], string> = {
   current: "installed at the latest release",
   unknown: "installed; latest release not resolved (list without --refresh)",
   dev: "a dev link (symlink, git checkout or worktree); never touched",
-  unmanaged: "its folder exists but was installed outside wowaddon; sync needs --adopt",
+  unmanaged:
+    "its folder exists but was installed outside wowaddon; rerun the sync or add with --adopt",
   error: "failed; message and code say why",
 };
 const errorCodes: Record<string, string> = {
@@ -601,25 +602,19 @@ const commands: Record<string, CommandHandler> = {
 
   async sync(ctx, args, signal) {
     const { flags, positionals } = splitFlags("sync", args);
-    if (flags["dry-run"]) {
-      const rows = await listRows(ctx, { refresh: true, ids: positionals, signal });
-      return {
-        data: { dryRun: true, backup: null, addons: rows },
-        lines: rows.map(formatListLine),
-        code: summarizeExit(rows),
-      };
-    }
+    const dryRun = Boolean(flags["dry-run"]);
     const { rows, backup } = await syncAddons(ctx, {
       ids: positionals,
       adopt: Boolean(flags.adopt),
+      dryRun,
       backup: !flags["no-backup"],
       signal,
       onProgress: logProgress,
     });
     if (backup) warn(`Backed up WTF to ${backup}`);
     return {
-      data: { dryRun: false, backup: backup ?? null, addons: rows },
-      lines: rows.map(formatResultLine),
+      data: { dryRun, backup: backup ?? null, addons: rows },
+      lines: rows.map(dryRun ? formatListLine : formatResultLine),
       code: summarizeExit(rows),
     };
   },
