@@ -48,7 +48,10 @@ for (const name of [
   "/absolute.lua",
   "C:/drive.lua",
   "//server/share.lua",
-  "Foo\\bad.lua",
+  "..\\bad.lua",
+  "\\absolute.lua",
+  "C:\\drive.lua",
+  "Foo\\..\\bad.lua",
   "Foo/.git/config",
   "Foo/.GIT",
   "Foo/../bad.lua",
@@ -60,6 +63,16 @@ for (const name of [
       readArchive(await zip({ "Foo/Foo.toc": toc, [name]: "bad" }), { flavor: "forever" }),
     ).rejects.toMatchObject({ code: "ARCHIVE_INVALID" });
   });
+test("backslash-separated paths read as folders", async () => {
+  const archive = await readArchive(await zip({ "Foo\\Foo.toc": toc, "Foo\\a.lua": "x" }), {
+    flavor: "forever",
+  });
+  expect(archive.folders).toEqual(["Foo"]);
+  expect([...archive.files.keys()]).toEqual(["Foo/Foo.toc", "Foo/a.lua"]);
+  await expect(
+    readArchive(await zip({ "Foo/Foo.toc": toc, "Foo\\Foo.toc": toc }), { flavor: "forever" }),
+  ).rejects.toMatchObject({ code: "ARCHIVE_INVALID" });
+});
 for (const unixMode of [0o120777, 0o020600, 0o010600])
   test(`reject Unix special entry ${unixMode}`, async () => {
     await expect(

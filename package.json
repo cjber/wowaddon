@@ -1,6 +1,6 @@
 {
   "name": "wowaddon",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Agent-friendly CLI and TUI that installs and updates WoW addons from GitHub, CurseForge, WoWInterface, Tukui and Wago Addons",
   "license": "MIT",
   "repository": "github:cjber/wowaddon",
