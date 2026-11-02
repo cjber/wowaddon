@@ -66,7 +66,11 @@ for (const name of [
 test("backslash-separated paths read as folders", async () => {
   // Windows tools also write each folder as its own entry ending in a backslash.
   const archive = await readArchive(
-    await zip({ "Foo\\": "", "Foo\\Libs\\": "", "Foo\\Foo.toc": toc, "Foo\\a.lua": "x" }),
+    await zip(
+      { "Foo\\": "", "Foo\\Libs\\": "", "Foo\\Foo.toc": toc, "Foo\\a.lua": "x" },
+      // As AtlasLoot's package has them: no Unix mode bits.
+      { "Foo\\": { msDosCompatible: true }, "Foo\\Libs\\": { msDosCompatible: true } },
+    ),
     { flavor: "forever" },
   );
   expect(archive.folders).toEqual(["Foo"]);
