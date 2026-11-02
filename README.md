@@ -54,7 +54,7 @@ belongs on your machine, not like a dashboard.
 
 ## Flavors
 
-`era` (Classic Era, `_classic_era_`) and `forever` (WoW: Forever, `_classic_beta_`,
+`era` (Classic Era, `_classic_era_`) and `forever` (WoW: Forever, `_forever_`,
 Interface 16001). `--flavor` and the TUI's `f` key switch between them; each has its own
 manifest and installed-state file.
 

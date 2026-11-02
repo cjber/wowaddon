@@ -52,14 +52,11 @@ test("default exists before discovery; honors XDG and tilde", async () => {
   const fallback = await dir(
     join(
       root,
-      "Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_classic_beta_/Interface/AddOns",
+      "Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns",
     ),
   );
   await dir(
-    join(
-      root,
-      "Games/another/drive_c/Program Files/World of Warcraft/_classic_beta_/Interface/AddOns",
-    ),
+    join(root, "Games/another/drive_c/Program Files/World of Warcraft/_forever_/Interface/AddOns"),
   );
   expect((await openContext({ flavor: "forever", env })).addonsDir).toBe(fallback);
   const ctx = await openContext({
@@ -74,13 +71,13 @@ test("Games and Steam discovery, ambiguous and no hit errors", async () => {
     code: "CONFIG_MISSING",
   });
   const games = await dir(
-    join(root, "Games/wow/drive_c/Program Files/World of Warcraft/_classic_beta_/Interface/AddOns"),
+    join(root, "Games/wow/drive_c/Program Files/World of Warcraft/_forever_/Interface/AddOns"),
   );
   expect((await openContext({ flavor: "forever", env })).addonsDir).toBe(games);
   const steam = await dir(
     join(
       root,
-      ".local/share/Steam/steamapps/compatdata/123/pfx/drive_c/Program Files (x86)/World of Warcraft/_classic_beta_/Interface/AddOns",
+      ".local/share/Steam/steamapps/compatdata/123/pfx/drive_c/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns",
     ),
   );
   expect(await discoverAddons(root, "forever")).toEqual([steam, games].sort());
