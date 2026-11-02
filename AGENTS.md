@@ -10,13 +10,17 @@ by a small per-flavor text manifest.
 bun install --frozen-lockfile
 bun run start      # run the app (TUI when stdin and stdout are a terminal)
 bun run check      # typecheck + lint + test
+bun run gate       # check + changelog + sift: what CI runs
+bun run build      # standalone binaries in dist/
 bun run typecheck
 bun run lint
 bun test
 python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
 ```
 
-CI runs the same gate, plus actionlint, zizmor and gitleaks on the workflows and history.
+CI runs the same gate, builds and smoke-tests the x64 and arm64 binaries, and runs actionlint, zizmor and gitleaks.
+Releases: `bun scripts/release.ts patch|minor|major` on a branch, merge, then `bun scripts/release.ts tag` on the
+merged `main` commit and push the tag; `.github/workflows/release.yml` publishes the GitHub release with binaries and the CHANGELOG entry.
 
 ## Layout
 

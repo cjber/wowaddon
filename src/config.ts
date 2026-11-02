@@ -100,7 +100,7 @@ export async function openContext(opts: {
           )
         : join(
             home,
-            "Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_classic_beta_/Interface/AddOns",
+            "Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns",
           );
     if (await directory(fallback)) addonsDir = fallback;
     else {

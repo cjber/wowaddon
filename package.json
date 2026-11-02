@@ -1,6 +1,9 @@
 {
   "name": "wowaddon",
   "version": "1.0.0",
+  "description": "Agent-friendly CLI and TUI that installs and updates WoW addons from GitHub, CurseForge and WoWInterface",
+  "license": "MIT",
+  "repository": "github:cjber/wowaddon",
   "private": true,
   "type": "module",
   "bin": {
@@ -12,7 +15,9 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "check": "bun run typecheck && bun run lint && bun test",
+    "gate": "bun run check && bun scripts/changelog.ts --check && python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check",
+    "build": "bun scripts/build.ts"
   },
   "dependencies": {
     "@opentui/core": "0.7.0",

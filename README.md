@@ -6,7 +6,14 @@ would rather not remember the flags.
 
 ## Install
 
-Needs [Bun](https://bun.sh).
+Each release has standalone Linux binaries, `wowaddon-linux-x64` and `wowaddon-linux-arm64`, that need nothing else:
+
+```sh
+gh release download -R cjber/wowaddon -p wowaddon-linux-x64 -O ~/.local/bin/wowaddon
+chmod +x ~/.local/bin/wowaddon
+```
+
+To run from source instead, you need [Bun](https://bun.sh).
 
 ```sh
 git clone git@github.com:cjber/wowaddon.git
@@ -54,7 +61,7 @@ belongs on your machine, not like a dashboard.
 
 ## Flavors
 
-`era` (Classic Era, `_classic_era_`) and `forever` (WoW: Forever, `_classic_beta_`,
+`era` (Classic Era, `_classic_era_`) and `forever` (WoW: Forever, `_forever_`,
 Interface 16001). `--flavor` and the TUI's `f` key switch between them; each has its own
 manifest and installed-state file.
 

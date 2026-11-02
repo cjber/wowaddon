@@ -4,14 +4,4 @@ set -euo pipefail
 script=$(realpath "$0")
 root=$(cd "$(dirname "$script")/.." && pwd)
 
-# Some GUI launchers and agent hosts preserve Kitty's window identity while
-# replacing TERM with "dumb". Restore the real terminal type so OpenTUI can
-# negotiate keyboard and graphics capabilities.
-if [[ "${TERM:-}" == "dumb" && -n "${KITTY_WINDOW_ID:-}" ]]; then
-  export TERM=xterm-kitty
-fi
-
-# OSC 66 explicit-width wrappers can split Kitty's image placeholder graphemes.
-export OPENTUI_FORCE_EXPLICIT_WIDTH=false
-
 exec bun "$root/src/index.tsx" "$@"

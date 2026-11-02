@@ -21,7 +21,7 @@ export const flavors: Record<
   },
   forever: {
     name: "Forever",
-    clientDir: "_classic_beta_",
+    clientDir: "_forever_",
     cfType: 88568,
     version: /^1\.60(?:\.|$)/,
     interfaces: (n) => n >= 16000 && n < 16100,
