@@ -27,9 +27,17 @@ jobs:
         with:
           # A Bun that writes a newer bun.lock lockfileVersion needs Dependabot support first (see dependabot.yml).
           bun-version: 1.4.2
-      - run: bun install --frozen-lockfile --os linux --cpu "*" --libc "*"
-      - run: bun scripts/build.ts
+      - run: bun install --frozen-lockfile
+      - env:
+          ARCH: ${{ matrix.arch }}
+        run: bun scripts/build.ts "$ARCH"
       - name: Exercise the native executable outside the checkout
         env:
           ARCH: ${{ matrix.arch }}
         run: bun scripts/smoke-binary.ts "dist/wowaddon-linux-$ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wowaddon-linux-${{ matrix.arch }}
+          path: dist/wowaddon-linux-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 7

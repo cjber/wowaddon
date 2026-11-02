@@ -1,7 +1,9 @@
 import { mkdirSync } from "node:fs";
 
+// One architecture per call when given (each CI runner builds its own natively), otherwise both.
+const arches = process.argv[2] ? [process.argv[2]] : ["x64", "arm64"];
 mkdirSync("dist", { recursive: true });
-for (const arch of ["x64", "arm64"] as const) {
+for (const arch of arches) {
   const argv = [
     "bun",
     "build",

@@ -20,7 +20,7 @@ python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
 
 CI runs the same gate, builds and smoke-tests the x64 and arm64 binaries, and runs actionlint, zizmor and gitleaks.
 Releases: `bun scripts/release.ts patch|minor|major` on a branch, merge, then `bun scripts/release.ts tag` on the
-merged `main` commit and push the tag; `release.yml` publishes the GitHub release with binaries and the CHANGELOG entry.
+merged `main` commit and push the tag; `.github/workflows/release.yml` publishes the GitHub release with binaries and the CHANGELOG entry.
 
 ## Layout
 
