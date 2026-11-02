@@ -20,19 +20,22 @@ function bad(message: string): never {
   throw new WowaddonError("ARCHIVE_INVALID", message);
 }
 // Windows-made ZIPs (AtlasLoot Classic Forever among them) separate paths with backslashes, against
-// the ZIP spec; read them as slashes, so every segment still meets the same checks.
-function zipPath(entry: Entry): string {
-  const path = entry.filename.replaceAll("\\", "/").replace(/\/$/, "");
+// the ZIP spec; read them as slashes, so every segment still meets the same checks. Their folder
+// entries end in a backslash, which zip.js does not count as a directory.
+function zipPath(entry: Entry): { path: string; directory: boolean } {
+  const name = entry.filename.replaceAll("\\", "/");
+  const directory = entry.directory || name.endsWith("/");
+  const path = name.replace(/\/$/, "");
   if (!path || path.startsWith("/") || path.split("/").some((part) => !safeFolder(part)))
     bad(`Unsafe ZIP path: ${entry.filename}`);
   const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
   if (
     (mode && mode !== 0o100000 && mode !== 0o040000) ||
-    (mode === 0o040000 && !entry.directory) ||
-    (mode === 0o100000 && entry.directory)
+    (mode === 0o040000 && !directory) ||
+    (mode === 0o100000 && directory)
   )
     bad(`ZIP contains a symlink or special entry: ${entry.filename}`);
-  return path;
+  return { path, directory };
 }
 export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Promise<Archive> {
   const reader = new ZipReader(new Uint8ArrayReader(bytes), {
@@ -41,18 +44,18 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
   });
   const maxBytes = opts.maxBytes ?? 500 * 1024 * 1024;
   try {
-    const entries: { entry: Entry; path: string }[] = [];
+    const entries: { entry: Entry; path: string; directory: boolean }[] = [];
     const names = new Map<string, { path: string; directory: boolean; explicit: boolean }>();
     let declared = 0;
     for await (const entry of reader.getEntriesGenerator()) {
       checkAbort(opts.signal);
       if (entries.length >= (opts.maxEntries ?? 20000)) bad("ZIP exceeds the entry count limit.");
-      const path = zipPath(entry);
+      const { path, directory: isDirectory } = zipPath(entry);
       const parts = path.split("/");
       for (let n = 1; n <= parts.length; n++) {
         const prefix = parts.slice(0, n).join("/");
         const key = prefix.normalize("NFC").toLowerCase();
-        const directory = n < parts.length || entry.directory;
+        const directory = n < parts.length || isDirectory;
         const explicit = n === parts.length;
         const previous = names.get(key);
         if (
@@ -67,12 +70,12 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
       declared += entry.uncompressedSize;
       if (!Number.isSafeInteger(declared) || declared > maxBytes)
         bad("ZIP exceeds the uncompressed size limit.");
-      entries.push({ entry, path });
+      entries.push({ entry, path, directory: isDirectory });
     }
     const files = new Map<string, Uint8Array>();
     let actual = 0;
-    for (const { entry, path } of entries) {
-      if (entry.directory) continue;
+    for (const { entry, path, directory } of entries) {
+      if (directory || entry.directory) continue;
       checkAbort(opts.signal);
       const chunks: Uint8Array[] = [];
       let size = 0;
