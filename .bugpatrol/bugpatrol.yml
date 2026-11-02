@@ -1,0 +1,31 @@
+version: 1
+
+# Bugpatrol profile for wowaddon, a Bun CLI and TUI. Every command runs against a throwaway HOME and
+# config so it can never touch the real game install; see instructions.md.
+app:
+  platform: cli
+  source: .
+  setup:
+    - run: bun install --frozen-lockfile
+      timeoutMs: 300000
+  connect:
+    cli:
+      timeoutMs: 60000
+  instructions: .bugpatrol/instructions.md
+  secrets: []
+
+agents:
+  explorer:
+    use: claude
+    maxSteps: 25
+    budgetUsd: 1
+  judge:
+    use: claude
+  fixer:
+    enabled: false
+    use: claude
+  review:
+    name: cli
+    budgetUsd: 1
+  github:
+    enabled: false

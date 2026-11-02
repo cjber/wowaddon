@@ -5,3 +5,8 @@ dist/
 .DS_Store
 .sift/runs/
 .claude/worktrees/
+
+# Patrol runs: local data
+.bugpatrol/runs/
+.speedpatrol/runs/
+.sloppatrol/runs/
