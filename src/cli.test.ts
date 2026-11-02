@@ -1,5 +1,15 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { type Context, type Flavor, type Row, WowaddonError } from "./types";
+import type { AdoptionPlan, Query } from "./service";
+import {
+  type AddonInfo,
+  type Context,
+  type Flavor,
+  type Listing,
+  type Row,
+  type SourceKind,
+  type SourceReport,
+  WowaddonError,
+} from "./types";
 
 const context: Context = {
   flavor: "era",
@@ -36,6 +46,72 @@ const removeAddonMock = mock(
   }),
 );
 const parseRefMock = mock((_input: string) => ({ kind: "gh" as const, ref: "owner/repo" }));
+const listing: Listing = {
+  ref: "cf:1735937",
+  kind: "cf",
+  name: "OpenMap",
+  summary: "A parchment world map",
+  authors: ["cjber"],
+  downloads: 1200,
+  updated: "2026-10-30T00:00:00Z",
+  categories: ["Map & Minimap"],
+  gameVersions: ["1.60.1"],
+  flavors: ["forever"],
+  url: "https://www.curseforge.com/wow/addons/openmap",
+};
+const okSources: SourceReport[] = [
+  { kind: "cf", status: "ok", count: 1 },
+  { kind: "wago", status: "skipped", count: 0, code: "KEY", message: "needs a key" },
+];
+const findAddonsMock = mock(
+  async (
+    _ctx: Context,
+    _query: Query,
+    _opts: { sources?: SourceKind[]; signal?: AbortSignal },
+  ): Promise<{ results: Listing[]; sources: SourceReport[] }> => ({
+    results: [listing],
+    sources: okSources,
+  }),
+);
+const addonInfoMock = mock(
+  async (_ctx: Context, _ref: string): Promise<AddonInfo> => ({
+    ...listing,
+    version: "1.2.0",
+    links: { website: listing.url },
+    folders: ["OpenMap"],
+    description: "Maps.",
+    changelog: { version: "1.2.0", text: "- fixed zoom" },
+  }),
+);
+const listCategoriesMock = mock(async () => ({
+  categories: [{ kind: "cf" as const, id: "6", name: "Map & Minimap", parent: "Addons" }],
+  sources: [{ kind: "cf" as const, status: "ok" as const, count: 1 }],
+}));
+const listUntrackedMock = mock(
+  async (_ctx: Context): Promise<{ folder: string; title?: string; toc: string }[]> => [],
+);
+const adoptAddonsMock = mock(
+  async (
+    _ctx: Context,
+    _opts: { wowup?: string | false; dryRun?: boolean; backup?: boolean },
+  ): Promise<{ plan: AdoptionPlan; rows: Row[]; backup?: string }> => ({
+    plan: {
+      wowup: { path: "/wowup", installation: "World of Warcraft: Forever" },
+      matches: [
+        {
+          entry: { id: "cf:301", kind: "cf", ref: "301", note: "Atlas" },
+          folders: ["Atlas"],
+          matchedBy: "toc",
+          inManifest: false,
+          conflicts: [],
+        },
+      ],
+      unmatched: [{ folder: "Mystery", reason: "no match" }],
+      skipped: [{ folder: "Dev", reason: "dev link, never touched" }],
+    },
+    rows: [],
+  }),
+);
 
 // mock.module patches the module registry process-wide, not just for this file, so capture
 // the real module first and put it back once this file's tests finish.
@@ -48,9 +124,27 @@ mock.module("./service", () => ({
   syncAddons: syncAddonsMock,
   removeAddon: removeAddonMock,
   parseRef: parseRefMock,
+  findAddons: findAddonsMock,
+  addonInfo: addonInfoMock,
+  listCategories: listCategoriesMock,
+  listUntracked: listUntrackedMock,
+  adoptAddons: adoptAddonsMock,
 }));
 
 const { runCli } = await import("./cli");
+const EXPECTED_COMMANDS = [
+  "sync",
+  "check",
+  "add",
+  "remove",
+  "list",
+  "search",
+  "browse",
+  "info",
+  "categories",
+  "adopt",
+  "schema",
+];
 
 afterAll(() => {
   mock.module("./service", () => realService);
@@ -96,6 +190,15 @@ beforeEach(() => {
   syncAddonsMock.mockClear();
   removeAddonMock.mockClear();
   parseRefMock.mockClear();
+  for (const m of [
+    findAddonsMock,
+    addonInfoMock,
+    listCategoriesMock,
+    listUntrackedMock,
+    adoptAddonsMock,
+  ])
+    m.mockClear();
+  listUntrackedMock.mockImplementation(async () => []);
   openContextMock.mockImplementation(async () => context);
   listRowsMock.mockImplementation(async () => []);
   addAddonMock.mockImplementation(async () => okRow());
@@ -308,7 +411,7 @@ describe("schema and JSON errors", () => {
   test("schema describes every command, the statuses and the exit codes", async () => {
     expect(await runCli(["schema"])).toBe(0);
     const doc = JSON.parse(logs.join("\n"));
-    expect(Object.keys(doc.commands)).toEqual(["sync", "check", "add", "remove", "list", "schema"]);
+    expect(Object.keys(doc.commands)).toEqual(EXPECTED_COMMANDS);
     expect(doc.commands.sync.usage).toBe(
       "wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]",
     );
@@ -402,5 +505,122 @@ describe("context notices", () => {
     }));
     await runCli(["list"]);
     expect(errs).toContain("migrated addons.txt to era.txt");
+  });
+});
+
+describe("finding addons", () => {
+  test("search passes the query and flags, and reports skipped sources on stderr", async () => {
+    expect(
+      await runCli([
+        "search",
+        "world",
+        "map",
+        "--sort",
+        "downloads",
+        "--source",
+        "cf",
+        "--limit",
+        "5",
+        "--json",
+      ]),
+    ).toBe(0);
+    const [, query, opts] = findAddonsMock.mock.calls[0];
+    expect(query).toMatchObject({ text: "world map", order: "downloads", limit: 5, page: 1 });
+    expect(opts.sources).toEqual(["cf"]);
+    expect(JSON.parse(logs[0])).toMatchObject({
+      schemaVersion: 1,
+      command: "search",
+      query: "world map",
+      results: [{ ref: "cf:1735937" }],
+      sources: okSources,
+    });
+    expect(errs).toContain("wago skipped: needs a key");
+  });
+
+  test("search needs words and a known sort", async () => {
+    expect(await runCli(["search"])).toBe(2);
+    expect(await runCli(["search", "x", "--sort", "stars"])).toBe(2);
+  });
+
+  test("search exits 1 when every source failed", async () => {
+    findAddonsMock.mockImplementationOnce(async () => ({
+      results: [],
+      sources: [{ kind: "cf", status: "failed", count: 0, message: "down" }],
+    }));
+    expect(await runCli(["search", "x"])).toBe(1);
+    expect(logs).toEqual(["no addons found"]);
+  });
+
+  test("browse maps its mode to an order and rejects unknown modes", async () => {
+    await runCli(["browse", "--category", "map"]);
+    expect(findAddonsMock.mock.calls[0][1]).toMatchObject({ order: "downloads", category: "map" });
+    await runCli(["browse", "trending", "--json"]);
+    expect(findAddonsMock.mock.calls[1][1].order).toBe("trending");
+    expect(JSON.parse(logs[1])).toMatchObject({ command: "browse", mode: "trending" });
+    expect(await runCli(["browse", "hot"])).toBe(2);
+  });
+
+  test("info prints the details and its JSON carries the addon", async () => {
+    expect(await runCli(["info", "cf:1735937"])).toBe(0);
+    expect(addonInfoMock.mock.calls[0][1]).toBe("cf:1735937");
+    expect(logs.join("\n")).toContain("changelog 1.2.0:");
+    await runCli(["info", "cf:1735937", "--json"]);
+    expect(JSON.parse(logs.at(-1) ?? "")).toMatchObject({
+      command: "info",
+      addon: { folders: ["OpenMap"] },
+    });
+    expect(await runCli(["info"])).toBe(2);
+  });
+
+  test("categories lists each source's categories", async () => {
+    expect(await runCli(["categories"])).toBe(0);
+    expect(logs).toEqual(["cf     Addons / Map & Minimap"]);
+  });
+});
+
+describe("adopt", () => {
+  test("a dry run lists matches, unmatched and skipped folders", async () => {
+    expect(await runCli(["adopt", "--dry-run", "--no-wowup"])).toBe(0);
+    expect(adoptAddonsMock.mock.calls[0][1]).toMatchObject({
+      dryRun: true,
+      wowup: false,
+      backup: true,
+    });
+    expect(logs).toEqual([
+      "WOULD adopt cf:301 Atlas [Atlas] by toc",
+      "UNMATCHED Mystery: no match",
+      "SKIP Dev: dev link, never touched",
+    ]);
+  });
+
+  test("adopt forwards --wowup and --no-backup and reports the backup", async () => {
+    adoptAddonsMock.mockImplementationOnce(async () => ({
+      plan: { wowup: null, matches: [], unmatched: [], skipped: [] },
+      rows: [okRow()],
+      backup: "/b/WTF.zip",
+    }));
+    await runCli(["adopt", "--wowup", "/data/WowUp", "--no-backup", "--json"]);
+    expect(adoptAddonsMock.mock.calls[0][1]).toMatchObject({ wowup: "/data/WowUp", backup: false });
+    expect(JSON.parse(logs[0])).toMatchObject({
+      command: "adopt",
+      backup: "/b/WTF.zip",
+      addons: [okRow()],
+    });
+    expect(errs).toContain("Backed up WTF to /b/WTF.zip");
+  });
+
+  test("check lists untracked folders, and leaves them out for named ids", async () => {
+    listUntrackedMock.mockImplementation(async () => [
+      { folder: "Atlas", title: "Atlas", toc: "" },
+    ]);
+    await runCli(["check", "--json"]);
+    expect(JSON.parse(logs[0]).untracked).toEqual([{ folder: "Atlas", title: "Atlas" }]);
+    await runCli(["check"]);
+    expect(logs.slice(1, 3)).toEqual([
+      "all 0 addons are current",
+      "UNTRACKED Atlas (Atlas): wowaddon adopt takes it over",
+    ]);
+    await runCli(["check", "cf:6124", "--json"]);
+    expect(JSON.parse(logs.at(-1) ?? "").untracked).toEqual([]);
   });
 });

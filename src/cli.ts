@@ -1,6 +1,30 @@
 import packageJson from "../package.json";
-import { addAddon, listRows, openContext, type Removal, removeAddon, syncAddons } from "./service";
-import { type Context, type Flavor, type Progress, type Row, WowaddonError } from "./types";
+import { sourceNotes } from "./discover";
+import {
+  addAddon,
+  addonInfo,
+  adoptAddons,
+  findAddons,
+  listCategories,
+  listRows,
+  listUntracked,
+  openContext,
+  type Query,
+  type Removal,
+  removeAddon,
+  syncAddons,
+} from "./service";
+import {
+  type AddonInfo,
+  type Context,
+  type Flavor,
+  type Listing,
+  type Progress,
+  type Row,
+  type SourceKind,
+  type SourceReport,
+  WowaddonError,
+} from "./types";
 
 const VERSION = packageJson.version;
 // Bumped only when a documented field of the JSON output changes meaning or goes away.
@@ -29,6 +53,13 @@ const adopt: Flag = { help: "take over a folder that was installed outside wowad
 const dryRun: Flag = {
   help: "report what would change; the manifest, state and AddOns stay as they are",
 };
+const discoveryFlags: Record<string, Flag> = {
+  category: { help: "only this category (see wowaddon categories)", value: "NAME" },
+  source: { help: "only these sources, comma separated: cf,gh,wowi,tukui", value: "LIST" },
+  limit: { help: "results per page, 1 to 50 (default 20)", value: "N" },
+  page: { help: "page number, from 1; each source returns its own Nth page", value: "N" },
+  "all-flavors": { help: "include addons that do not list this flavor" },
+};
 const specs: Record<string, CommandSpec> = {
   sync: {
     args: "[<id|ref>...]",
@@ -44,7 +75,7 @@ const specs: Record<string, CommandSpec> = {
     args: "[<id|ref>...]",
     summary: "report which addons sync would install or update; installs nothing",
     flags: {},
-    output: "{ ...envelope, updates: number, addons: Row[] }",
+    output: "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[] }",
   },
   add: {
     args: "<ref|url> | <kind> <ref>",
@@ -68,6 +99,49 @@ const specs: Record<string, CommandSpec> = {
     summary: "list managed addons from local state",
     flags: { refresh: { help: "also resolve each addon's latest release" } },
     output: "{ ...envelope, addons: Row[] }",
+  },
+  search: {
+    args: "<text...>",
+    summary: "search every keyless source for addons this flavor can load; refs go straight to add",
+    flags: {
+      sort: { help: "relevance (default), downloads, updated or name", value: "ORDER" },
+      ...discoveryFlags,
+    },
+    output:
+      "{ ...envelope, query: string, sort: string, category: string | null, page: number, results: Listing[], sources: SourceReport[] }",
+  },
+  browse: {
+    args: "[popular|trending|updated|name]",
+    summary: "list the most downloaded (default), trending, recently updated or A-Z addons",
+    flags: discoveryFlags,
+    output:
+      "{ ...envelope, mode: string, category: string | null, page: number, results: Listing[], sources: SourceReport[] }",
+  },
+  info: {
+    args: "<ref|url>",
+    summary:
+      "one addon's page: summary, authors, downloads, last update, game versions, categories, links, folders, changelog",
+    flags: {},
+    output: "{ ...envelope, addon: AddonInfo }",
+  },
+  categories: {
+    args: "",
+    summary: "list the categories browse and search --category accept, per source",
+    flags: {},
+    output: "{ ...envelope, categories: Category[], sources: SourceReport[] }",
+  },
+  adopt: {
+    args: "",
+    summary:
+      "take over installed addons wowaddon does not manage yet, matched by WowUp's records, TOC project IDs or title",
+    flags: {
+      wowup: { help: "WowUp data folder to read (default: found automatically)", value: "PATH" },
+      "no-wowup": { help: "ignore WowUp's records" },
+      "dry-run": { help: "report the matches; the manifest, state and AddOns stay as they are" },
+      "no-backup": { help: "skip the WTF snapshot taken before the first change" },
+    },
+    output:
+      "{ ...envelope, dryRun: boolean, wowup: { path, installation } | null, backup: string | null, matches: Match[], addons: Row[], unmatched: { folder, title?, reason }[], skipped: { folder, reason }[] }",
   },
   schema: {
     args: "",
@@ -110,6 +184,11 @@ ${Object.entries(globalFlags)
   ${"-h, --help".padEnd(24)} show this help
   ${"-V, --version".padEnd(24)} show the version
 
+Finding addons (search, browse, info) per source:
+${Object.entries(sourceNotes)
+  .map(([kind, note]) => `  ${kind.padEnd(6)} ${note.via}.\n         Gaps: ${note.gaps}.`)
+  .join("\n")}
+
 Exit codes: ${Object.entries(exitCodes)
   .map(([name, code]) => `${code} ${name}`)
   .join(", ")}. Run wowaddon schema for the JSON output shapes.
@@ -138,6 +217,12 @@ const errorCodes: Record<string, string> = {
   WAGO_KEY_MISSING: "Wago Addons needs WAGO_ADDONS_API_KEY or a wago_token file",
   WAGO_KEY_INVALID: "Wago Addons rejected the API key",
   BACKUP_FAILED: "the WTF snapshot failed, so sync changed nothing",
+  SOURCE_RESPONSE: "a source returned data wowaddon could not read",
+  CATEGORY: "a source has no category of that name (a skipped source in sources)",
+  NO_CATEGORIES: "a source has no categories (a skipped source in sources)",
+  NO_FLAVOR_TAG: "a source cannot tell which addons support this flavor (a skipped source)",
+  WOWUP_MISSING: "no WowUp addons.json in the --wowup folder",
+  WOWUP_INVALID: "WowUp's data could not be read",
   ABORTED: "cancelled",
 };
 
@@ -158,7 +243,17 @@ function schema() {
       Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note? }, status, message?, code? }",
       error:
         "{ schemaVersion, command, error: { code: string, message: string } } on stdout, with a non-zero exit",
+      Listing:
+        "{ ref: string (add takes it as is), kind, name, summary, authors: string[], downloads: number | null, updated: ISO string | null, categories: string[], gameVersions: string[], flavors: ('era' | 'forever')[], url }",
+      AddonInfo:
+        "Listing & { version: string | null, links: { website?, source?, issues?, wiki?, homepage?, donate? }, folders: string[], description: string, changelog: { version: string | null, text: string } | null }",
+      SourceReport:
+        "{ kind, status: 'ok' | 'skipped' | 'failed', count: number, code?, message? }: one per source, so a failed source never hides the others",
+      Category: "{ kind, id, name, parent?, count? }",
+      Match:
+        "{ entry, folders: string[], matchedBy: 'manifest' | 'wowup' | 'toc' | 'title', inManifest: boolean, conflicts: string[] }",
     },
+    sources: sourceNotes,
     statuses,
     errorCodes,
     exitCodes: Object.fromEntries(
@@ -291,6 +386,87 @@ function splitFlags(
   return { flags, positionals };
 }
 
+const kinds: SourceKind[] = ["cf", "gh", "wowi", "tukui", "wago"];
+function count(
+  flags: Record<string, string | boolean>,
+  name: string,
+  fallback: number,
+  max: number,
+) {
+  const value = flags[name];
+  if (value === undefined) return fallback;
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n < 1 || n > max)
+    usageError(`--${name} must be a whole number from 1 to ${max}`);
+  return n;
+}
+function discoveryQuery(
+  flags: Record<string, string | boolean>,
+  order: Query["order"],
+  text?: string,
+): { query: Query; sources?: SourceKind[] } {
+  const sources =
+    typeof flags.source === "string"
+      ? flags.source.split(",").map((kind) => kind.trim().toLowerCase())
+      : undefined;
+  for (const kind of sources ?? [])
+    if (!kinds.includes(kind as SourceKind))
+      usageError(`--source takes ${kinds.join(", ")}, got: ${kind}`);
+  return {
+    query: {
+      ...(text ? { text } : {}),
+      order,
+      ...(typeof flags.category === "string" ? { category: flags.category } : {}),
+      limit: count(flags, "limit", 20, 50),
+      page: count(flags, "page", 1, 100),
+      allFlavors: Boolean(flags["all-flavors"]),
+    },
+    sources: sources as SourceKind[] | undefined,
+  };
+}
+const compact = (n: number | null) =>
+  n === null
+    ? "-"
+    : n >= 1e6
+      ? `${(n / 1e6).toFixed(1)}M`
+      : n >= 1e3
+        ? `${(n / 1e3).toFixed(1)}k`
+        : String(n);
+function formatListing(listing: Listing): string {
+  return [
+    listing.ref.padEnd(28),
+    (listing.name.length > 32 ? `${listing.name.slice(0, 31)}…` : listing.name).padEnd(32),
+    compact(listing.downloads).padStart(7),
+    (listing.updated ?? "").slice(0, 10).padEnd(10),
+    listing.summary.slice(0, 80),
+  ]
+    .join(" ")
+    .trimEnd();
+}
+// Skipped and failed sources go to stderr, so a person sees why a source is missing from the list.
+function reportSources(sources: SourceReport[]): void {
+  for (const source of sources)
+    if (source.status !== "ok") warn(`${source.kind} ${source.status}: ${source.message ?? ""}`);
+}
+function formatInfo(addon: AddonInfo): string[] {
+  const lines = [
+    `${addon.name}  ${addon.ref}`,
+    addon.summary,
+    `by ${addon.authors.join(", ") || "unknown"} · ${compact(addon.downloads)} downloads · updated ${(addon.updated ?? "unknown").slice(0, 10)} · latest ${addon.version ?? "unknown"}`,
+    `flavors: ${addon.flavors.join(", ") || "unknown"} · game versions: ${addon.gameVersions.join(", ") || "unknown"}`,
+  ];
+  if (addon.categories.length) lines.push(`categories: ${addon.categories.join(", ")}`);
+  if (addon.folders.length) lines.push(`folders: ${addon.folders.join(", ")}`);
+  for (const [name, url] of Object.entries(addon.links)) lines.push(`${name}: ${url}`);
+  if (addon.changelog)
+    lines.push(
+      "",
+      `changelog${addon.changelog.version ? ` ${addon.changelog.version}` : ""}:`,
+      addon.changelog.text,
+    );
+  return lines.filter((line, index) => index !== 1 || line);
+}
+
 // The TUI opens with the same --flavor / --addons-dir the command line was given.
 export function tuiOptions(argv: string[]): Globals {
   return parseArgs(argv).globals;
@@ -305,6 +481,124 @@ interface Outcome {
 type CommandHandler = (ctx: Context, args: string[], signal: AbortSignal) => Promise<Outcome>;
 
 const commands: Record<string, CommandHandler> = {
+  async search(ctx, args, signal) {
+    const { flags, positionals } = splitFlags("search", args);
+    const text = positionals.join(" ").trim();
+    if (!text) usageError(`usage: ${usage("search")}`);
+    const sort = flags.sort ?? "relevance";
+    if (!["relevance", "downloads", "updated", "name"].includes(String(sort)))
+      usageError(`--sort takes relevance, downloads, updated or name, got: ${sort}`);
+    const { query, sources } = discoveryQuery(flags, sort as Query["order"], text);
+    const found = await findAddons(ctx, query, { sources, signal });
+    reportSources(found.sources);
+    return {
+      data: {
+        query: text,
+        sort,
+        category: query.category ?? null,
+        page: query.page,
+        results: found.results,
+        sources: found.sources,
+      },
+      lines: found.results.length ? found.results.map(formatListing) : ["no addons found"],
+      code: found.sources.every((source) => source.status === "failed")
+        ? exitCodes.failed
+        : exitCodes.ok,
+    };
+  },
+
+  async browse(ctx, args, signal) {
+    const { flags, positionals } = splitFlags("browse", args);
+    const modes: Record<string, Query["order"]> = {
+      popular: "downloads",
+      trending: "trending",
+      updated: "updated",
+      name: "name",
+    };
+    const mode = positionals[0] ?? "popular";
+    if (positionals.length > 1 || !Object.hasOwn(modes, mode))
+      usageError(`usage: ${usage("browse")}`);
+    const { query, sources } = discoveryQuery(flags, modes[mode]);
+    const found = await findAddons(ctx, query, { sources, signal });
+    reportSources(found.sources);
+    return {
+      data: {
+        mode,
+        category: query.category ?? null,
+        page: query.page,
+        results: found.results,
+        sources: found.sources,
+      },
+      lines: found.results.length ? found.results.map(formatListing) : ["no addons found"],
+      code: found.sources.every((source) => source.status === "failed")
+        ? exitCodes.failed
+        : exitCodes.ok,
+    };
+  },
+
+  async info(ctx, args, signal) {
+    const { positionals } = splitFlags("info", args);
+    if (positionals.length !== 1) usageError(`usage: ${usage("info")}`);
+    const addon = await addonInfo(ctx, positionals[0], signal);
+    return { data: { addon }, lines: formatInfo(addon), code: exitCodes.ok };
+  },
+
+  async categories(ctx, args, signal) {
+    const { positionals } = splitFlags("categories", args);
+    if (positionals.length) usageError(`usage: ${usage("categories")}`);
+    const found = await listCategories(ctx, signal);
+    reportSources(found.sources);
+    return {
+      data: found,
+      lines: found.categories.map(
+        (category) =>
+          `${category.kind.padEnd(6)} ${category.parent ? `${category.parent} / ` : ""}${category.name}${category.count ? ` (${category.count})` : ""}`,
+      ),
+      code: found.sources.every((source) => source.status !== "ok")
+        ? exitCodes.failed
+        : exitCodes.ok,
+    };
+  },
+
+  async adopt(ctx, args, signal) {
+    const { flags, positionals } = splitFlags("adopt", args);
+    if (positionals.length) usageError(`usage: ${usage("adopt")}`);
+    const dryRun = Boolean(flags["dry-run"]);
+    const { plan, rows, backup } = await adoptAddons(ctx, {
+      wowup: flags["no-wowup"] ? false : typeof flags.wowup === "string" ? flags.wowup : undefined,
+      dryRun,
+      backup: !flags["no-backup"],
+      signal,
+      onProgress: logProgress,
+    });
+    if (backup) warn(`Backed up WTF to ${backup}`);
+    if (plan.wowup) warn(`Read WowUp's ${plan.wowup.installation} addons from ${plan.wowup.path}`);
+    const lines = [
+      ...plan.matches.map(
+        (match) =>
+          `${dryRun ? "WOULD adopt" : "ADOPT"} ${match.entry.id} ${match.entry.note ?? ""} [${match.folders.join(", ")}] by ${match.matchedBy}${match.conflicts.length ? `; also claimed by ${match.conflicts.join(", ")}` : ""}`,
+      ),
+      ...rows.map(formatResultLine),
+      ...plan.unmatched.map(
+        (item) => `UNMATCHED ${item.folder}${item.title ? ` (${item.title})` : ""}: ${item.reason}`,
+      ),
+      ...plan.skipped.map((item) => `SKIP ${item.folder}: ${item.reason}`),
+    ];
+    return {
+      data: {
+        dryRun,
+        wowup: plan.wowup,
+        backup: backup ?? null,
+        matches: plan.matches,
+        addons: rows,
+        unmatched: plan.unmatched,
+        skipped: plan.skipped,
+      },
+      lines: lines.length ? lines : ["nothing to adopt: every installed addon is managed"],
+      code: summarizeExit(rows),
+    };
+  },
+
   async sync(ctx, args, signal) {
     const { flags, positionals } = splitFlags("sync", args);
     if (flags["dry-run"]) {
@@ -335,9 +629,21 @@ const commands: Record<string, CommandHandler> = {
     const rows = await listRows(ctx, { refresh: true, ids: positionals, signal });
     const updates = rows.filter((row) => row.status === "missing" || row.status === "update");
     const shown = rows.filter((row) => row.status !== "current");
+    const untracked = positionals.length
+      ? []
+      : (await listUntracked(ctx)).map(({ folder, title }) => ({
+          folder,
+          ...(title ? { title } : {}),
+        }));
     return {
-      data: { updates: updates.length, addons: rows },
-      lines: shown.length ? shown.map(formatListLine) : [`all ${rows.length} addons are current`],
+      data: { updates: updates.length, addons: rows, untracked },
+      lines: [
+        ...(shown.length ? shown.map(formatListLine) : [`all ${rows.length} addons are current`]),
+        ...untracked.map(
+          (item) =>
+            `UNTRACKED ${item.folder}${item.title ? ` (${item.title})` : ""}: wowaddon adopt takes it over`,
+        ),
+      ],
       code: summarizeExit(rows),
     };
   },

@@ -1,0 +1,263 @@
+{
+  "addons": [
+    {
+      "id": 47671,
+      "repository": "https://github.com/Questie/Questie",
+      "repository_name": "Questie",
+      "source": "GitHub",
+      "description": "<h1>Questie</h1><p><a href=\"https://discord.gg/s33MAYKeZd\"><img src=\"https://img.shields.io/badge/discord-Questie-738bd7\" alt=\"Discord\"></a><a href=\"https://img.shields.io/github/stars/Questie/Questie",
+      "homepage": "",
+      "owner_name": "Questie",
+      "total_download_count": 4600659,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-11-02T13:51:34.000Z",
+          "tag_name": "bundle/v12.4.0+v1.0.10",
+          "prerelease": false,
+          "game_type": "mists",
+          "toc_title": "Questie v12.4.0",
+          "game_versions": [
+            {
+              "game_type": "unknown",
+              "interface": "00000",
+              "title": "Questie game client not supported",
+              "authors": ""
+            },
+            {
+              "game_type": "classic",
+              "interface": "11509",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "Questie"
+            },
+            {
+              "folder_name": "QuestieDB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "repository": "https://github.com/mooreatv/BetterVendorPrice",
+      "repository_name": "BetterVendorPrice",
+      "source": "GitHub",
+      "description": "<img src=\"https://raw.githubusercontent.com/mooreatv/BetterVendorPrice/master/BetterVendorPrice.png\" height=150 width=150 align=right><h1>Better Vendor Price (BVP) - WoW Forever edition</h1><p>BVP sho",
+      "homepage": "",
+      "owner_name": "mooreatv",
+      "total_download_count": 753543,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-10-25T19:57:34.000Z",
+          "tag_name": "v2.1.3",
+          "prerelease": false,
+          "game_type": "forever",
+          "toc_title": "Better Vendor Price",
+          "game_versions": [
+            {
+              "game_type": "retail",
+              "interface": "120105",
+              "title": "Better Vendor Price",
+              "authors": "MooreaTV moorea@ymail.com"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "Better Vendor Price",
+              "authors": "MooreaTV moorea@ymail.com"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "BetterVendorPrice"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 54151,
+      "repository": "https://github.com/raethkcj/RatingBuster",
+      "repository_name": "RatingBuster",
+      "source": "GitHub",
+      "description": "<h1>RatingBuster</h1><p><img src=\"https://user-images.githubusercontent.com/7716908/186707338-2bcf29cc-0529-4be9-9a4b-d29b621580fa.png\" alt=\"RatingBuster\"></p><p>RatingBuster converts combat ratings i",
+      "homepage": "",
+      "owner_name": "raethkcj",
+      "total_download_count": 731545,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-10-19T17:00:51.000Z",
+          "tag_name": "2.9.7",
+          "prerelease": false,
+          "game_type": "mists",
+          "toc_title": "RatingBuster",
+          "game_versions": [
+            {
+              "game_type": "classic",
+              "interface": "11509",
+              "title": "RatingBuster",
+              "authors": "Whitetooth, raethkcj"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "RatingBuster",
+              "authors": "Whitetooth, raethkcj"
+            },
+            {
+              "game_type": "burningCrusade",
+              "interface": "20506",
+              "title": "RatingBuster",
+              "authors": "Whitetooth, raethkcj"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "RatingBuster"
+            },
+            {
+              "folder_name": "StatLogic"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "recent": [
+    {
+      "id": 47671,
+      "repository": "https://github.com/Questie/Questie",
+      "repository_name": "Questie",
+      "source": "GitHub",
+      "description": "<h1>Questie</h1><p><a href=\"https://discord.gg/s33MAYKeZd\"><img src=\"https://img.shields.io/badge/discord-Questie-738bd7\" alt=\"Discord\"></a><a href=\"https://img.shields.io/github/stars/Questie/Questie",
+      "homepage": "",
+      "owner_name": "Questie",
+      "total_download_count": 4600659,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-11-02T13:51:34.000Z",
+          "tag_name": "bundle/v12.4.0+v1.0.10",
+          "prerelease": false,
+          "game_type": "mists",
+          "toc_title": "Questie v12.4.0",
+          "game_versions": [
+            {
+              "game_type": "unknown",
+              "interface": "00000",
+              "title": "Questie game client not supported",
+              "authors": ""
+            },
+            {
+              "game_type": "classic",
+              "interface": "11509",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "Questie"
+            },
+            {
+              "folder_name": "QuestieDB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2797969,
+      "repository": "https://github.com/Darth-Pie/ForeverSettings",
+      "repository_name": "ForeverSettings",
+      "source": "GitHub",
+      "description": "<h1>ForeverSettings</h1><p><strong>Not everyone has a beastmode PC. ForeverSettings finds the graphics settings that fit yours.</strong></p><p align=\"center\">  <img src=\".previews/results-window.png\" ",
+      "homepage": "https://addons.wago.io/addons/foreversettings",
+      "owner_name": "Darth-Pie",
+      "total_download_count": 51,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-10-31T13:17:20.000Z",
+          "tag_name": "v0.9.1",
+          "prerelease": false,
+          "game_type": "forever",
+          "toc_title": "ForeverSettings",
+          "game_versions": [
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "ForeverSettings",
+              "authors": ""
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "ForeverSettings"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "repository": "https://github.com/mooreatv/MAMA-multiboxing",
+      "repository_name": "MAMA-multiboxing",
+      "source": "GitHub",
+      "description": "<img src=\"https://raw.githubusercontent.com/mooreatv/Mama/master/Mama_icon.png\" height=64 width=64 align=right><h2>About M.A.M.A. Multiboxing</h2><p>MAMA is now Mama-forever: Multiboxing helper for <s",
+      "homepage": "",
+      "owner_name": "mooreatv",
+      "total_download_count": 12947,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-10-31T02:42:29.000Z",
+          "tag_name": "v2.12.3",
+          "prerelease": false,
+          "game_type": "forever",
+          "toc_title": "MAMA MooreaTv's/minimal yet Awesome Multiboxing Assistant (/mama)",
+          "game_versions": [
+            {
+              "game_type": "retail",
+              "interface": "120105",
+              "title": "MAMA MooreaTv's/minimal yet Awesome Multiboxing Assistant (/mama)",
+              "authors": "MooreaTV moorea@ymail.com"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "MAMA MooreaTv's/minimal yet Awesome Multiboxing Assistant (/mama)",
+              "authors": "MooreaTV moorea@ymail.com"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "Mama"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "count": 3,
+  "recentCount": 3
+}

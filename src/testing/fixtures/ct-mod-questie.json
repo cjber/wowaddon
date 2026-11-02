@@ -1,0 +1,117 @@
+{
+  "data": {
+    "id": 334372,
+    "name": "Questie",
+    "slug": "questie",
+    "summary": "The Classic Quest Helper",
+    "links": {
+      "websiteUrl": "https://www.curseforge.com/wow/addons/questie",
+      "wikiUrl": "https://github.com/Questie/Questie/wiki",
+      "issuesUrl": "https://github.com/Questie/Questie/issues",
+      "sourceUrl": "https://github.com/Questie/Questie"
+    },
+    "authors": [
+      {
+        "name": "TheCrux_BB"
+      },
+      {
+        "name": "yttriumtyclief"
+      },
+      {
+        "name": "cheeq"
+      },
+      {
+        "name": "Lawgon"
+      },
+      {
+        "name": "muehedev"
+      }
+    ],
+    "categories": [
+      {
+        "id": 1013,
+        "name": "Quests & Leveling"
+      },
+      {
+        "id": 1011,
+        "name": "Map & Minimap"
+      },
+      {
+        "id": 1055,
+        "name": "Tooltip"
+      }
+    ],
+    "downloadCount": 210683058,
+    "dateModified": "2026-11-02T14:20:11.607Z",
+    "dateReleased": "2026-11-02T13:52:10.623Z",
+    "latestFiles": [
+      {
+        "id": 9406949,
+        "displayName": "v12.4.0",
+        "fileDate": "2026-11-02T13:52:10.623Z",
+        "releaseType": 1,
+        "gameVersions": ["5.5.4", "2.5.6", "1.15.9", "3.80.2", "1.60.1"],
+        "sortableGameVersions": [
+          {
+            "gameVersionTypeId": 79434
+          },
+          {
+            "gameVersionTypeId": 73246
+          },
+          {
+            "gameVersionTypeId": 67408
+          },
+          {
+            "gameVersionTypeId": 81212
+          },
+          {
+            "gameVersionTypeId": 88568
+          }
+        ],
+        "modules": [
+          {
+            "name": "Questie"
+          }
+        ]
+      }
+    ],
+    "latestFilesIndexes": [
+      {
+        "gameVersion": "5.5.4",
+        "fileId": 9406949,
+        "releaseType": 1,
+        "gameVersionTypeId": 79434
+      },
+      {
+        "gameVersion": "2.5.6",
+        "fileId": 9406949,
+        "releaseType": 1,
+        "gameVersionTypeId": 73246
+      },
+      {
+        "gameVersion": "1.15.9",
+        "fileId": 9406949,
+        "releaseType": 1,
+        "gameVersionTypeId": 67408
+      },
+      {
+        "gameVersion": "3.80.2",
+        "fileId": 9406949,
+        "releaseType": 1,
+        "gameVersionTypeId": 81212
+      },
+      {
+        "gameVersion": "1.60.1",
+        "fileId": 9406949,
+        "releaseType": 1,
+        "gameVersionTypeId": 88568
+      },
+      {
+        "gameVersion": "3.80.1",
+        "fileId": 8552372,
+        "releaseType": 1,
+        "gameVersionTypeId": 81212
+      }
+    ]
+  }
+}

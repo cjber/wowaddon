@@ -1,0 +1,337 @@
+{
+  "data": [
+    {
+      "id": 334372,
+      "name": "Questie",
+      "slug": "questie",
+      "summary": "The Classic Quest Helper",
+      "links": {
+        "websiteUrl": "https://www.curseforge.com/wow/addons/questie",
+        "wikiUrl": "https://github.com/Questie/Questie/wiki",
+        "issuesUrl": "https://github.com/Questie/Questie/issues",
+        "sourceUrl": "https://github.com/Questie/Questie"
+      },
+      "authors": [
+        {
+          "name": "TheCrux_BB"
+        },
+        {
+          "name": "yttriumtyclief"
+        },
+        {
+          "name": "cheeq"
+        },
+        {
+          "name": "Lawgon"
+        },
+        {
+          "name": "muehedev"
+        }
+      ],
+      "categories": [
+        {
+          "id": 1013,
+          "name": "Quests & Leveling"
+        },
+        {
+          "id": 1011,
+          "name": "Map & Minimap"
+        },
+        {
+          "id": 1055,
+          "name": "Tooltip"
+        }
+      ],
+      "downloadCount": 210683058,
+      "dateModified": "2026-11-02T14:20:11.607Z",
+      "dateReleased": "2026-11-02T13:52:10.623Z",
+      "latestFiles": [
+        {
+          "id": 5938318,
+          "displayName": "v10.10.0-b1",
+          "fileDate": "2024-11-26T07:47:19.97Z",
+          "releaseType": 2,
+          "gameVersions": ["4.4.1", "3.4.3", "1.15.5"],
+          "sortableGameVersions": [
+            {
+              "gameVersionTypeId": 77522
+            },
+            {
+              "gameVersionTypeId": 73713
+            },
+            {
+              "gameVersionTypeId": 67408
+            }
+          ],
+          "modules": [
+            {
+              "name": "Questie"
+            }
+          ]
+        },
+        {
+          "id": 6753907,
+          "displayName": "v11.2.0",
+          "fileDate": "2025-07-10T22:04:42.52Z",
+          "releaseType": 1,
+          "gameVersions": ["4.4.2", "5.5.0", "1.15.7", "3.4.4"],
+          "sortableGameVersions": [
+            {
+              "gameVersionTypeId": 77522
+            },
+            {
+              "gameVersionTypeId": 79434
+            },
+            {
+              "gameVersionTypeId": 67408
+            },
+            {
+              "gameVersionTypeId": 73713
+            }
+          ],
+          "modules": [
+            {
+              "name": "Questie"
+            }
+          ]
+        }
+      ],
+      "latestFilesIndexes": [
+        {
+          "gameVersion": "5.5.4",
+          "fileId": 9406949,
+          "releaseType": 1,
+          "gameVersionTypeId": 79434
+        },
+        {
+          "gameVersion": "2.5.6",
+          "fileId": 9406949,
+          "releaseType": 1,
+          "gameVersionTypeId": 73246
+        },
+        {
+          "gameVersion": "1.15.9",
+          "fileId": 9406949,
+          "releaseType": 1,
+          "gameVersionTypeId": 67408
+        },
+        {
+          "gameVersion": "3.80.2",
+          "fileId": 9406949,
+          "releaseType": 1,
+          "gameVersionTypeId": 81212
+        },
+        {
+          "gameVersion": "1.60.1",
+          "fileId": 9406949,
+          "releaseType": 1,
+          "gameVersionTypeId": 88568
+        },
+        {
+          "gameVersion": "3.80.1",
+          "fileId": 8552372,
+          "releaseType": 1,
+          "gameVersionTypeId": 81212
+        }
+      ]
+    },
+    {
+      "id": 1695789,
+      "name": "QuestieTrace",
+      "slug": "questietrace",
+      "summary": "Data collection addon for Questie",
+      "links": {
+        "websiteUrl": "https://www.curseforge.com/wow/addons/questietrace",
+        "wikiUrl": null,
+        "issuesUrl": "https://github.com/Questie/QuestieTrace/issues",
+        "sourceUrl": "https://github.com/Questie/QuestieTrace"
+      },
+      "authors": [
+        {
+          "name": "Lawgon"
+        },
+        {
+          "name": "TheCrux_BB"
+        }
+      ],
+      "categories": [
+        {
+          "id": 1013,
+          "name": "Quests & Leveling"
+        }
+      ],
+      "downloadCount": 24055,
+      "dateModified": "2026-10-23T22:29:06.26Z",
+      "dateReleased": "2026-10-23T22:15:23.897Z",
+      "latestFiles": [
+        {
+          "id": 9303156,
+          "displayName": "v1.8.0",
+          "fileDate": "2026-10-23T22:15:23.897Z",
+          "releaseType": 1,
+          "gameVersions": ["5.5.4", "2.5.6", "1.15.9", "3.80.2", "1.60.1"],
+          "sortableGameVersions": [
+            {
+              "gameVersionTypeId": 79434
+            },
+            {
+              "gameVersionTypeId": 73246
+            },
+            {
+              "gameVersionTypeId": 67408
+            },
+            {
+              "gameVersionTypeId": 81212
+            },
+            {
+              "gameVersionTypeId": 88568
+            }
+          ],
+          "modules": [
+            {
+              "name": "QuestieTrace"
+            }
+          ]
+        }
+      ],
+      "latestFilesIndexes": [
+        {
+          "gameVersion": "5.5.4",
+          "fileId": 9303156,
+          "releaseType": 1,
+          "gameVersionTypeId": 79434
+        },
+        {
+          "gameVersion": "2.5.6",
+          "fileId": 9303156,
+          "releaseType": 1,
+          "gameVersionTypeId": 73246
+        },
+        {
+          "gameVersion": "1.15.9",
+          "fileId": 9303156,
+          "releaseType": 1,
+          "gameVersionTypeId": 67408
+        },
+        {
+          "gameVersion": "3.80.2",
+          "fileId": 9303156,
+          "releaseType": 1,
+          "gameVersionTypeId": 81212
+        },
+        {
+          "gameVersion": "1.60.1",
+          "fileId": 9303156,
+          "releaseType": 1,
+          "gameVersionTypeId": 88568
+        }
+      ]
+    },
+    {
+      "id": 1709717,
+      "name": "Quest Targets - RestedXP and Questie support",
+      "slug": "questtargets",
+      "summary": "Targets next valid quest mob, or a turn-in NPC, with one button or hotkey.",
+      "links": {
+        "websiteUrl": "https://www.curseforge.com/wow/addons/questtargets",
+        "wikiUrl": null,
+        "issuesUrl": null,
+        "sourceUrl": "https://github.com/simonrath/questtargets"
+      },
+      "authors": [
+        {
+          "name": "jackNine"
+        }
+      ],
+      "categories": [
+        {
+          "id": 1013,
+          "name": "Quests & Leveling"
+        }
+      ],
+      "downloadCount": 14236,
+      "dateModified": "2026-11-02T04:07:09.14Z",
+      "dateReleased": "2026-11-02T03:54:04.94Z",
+      "latestFiles": [
+        {
+          "id": 9402466,
+          "displayName": "Quest Targets 1.4.1 - Classic",
+          "fileDate": "2026-11-02T03:53:58.137Z",
+          "releaseType": 1,
+          "gameVersions": ["1.15.9"],
+          "sortableGameVersions": [
+            {
+              "gameVersionTypeId": 67408
+            }
+          ],
+          "modules": [
+            {
+              "name": "QuestTargets"
+            },
+            {
+              "name": "QuestieDB"
+            }
+          ]
+        },
+        {
+          "id": 9402467,
+          "displayName": "Quest Targets 1.4.1 - TBC",
+          "fileDate": "2026-11-02T03:53:59.88Z",
+          "releaseType": 1,
+          "gameVersions": ["2.5.6"],
+          "sortableGameVersions": [
+            {
+              "gameVersionTypeId": 73246
+            }
+          ],
+          "modules": [
+            {
+              "name": "QuestTargets"
+            },
+            {
+              "name": "QuestieDB"
+            }
+          ]
+        }
+      ],
+      "latestFilesIndexes": [
+        {
+          "gameVersion": "12.1.5",
+          "fileId": 9402470,
+          "releaseType": 1,
+          "gameVersionTypeId": 517
+        },
+        {
+          "gameVersion": "1.60.1",
+          "fileId": 9402469,
+          "releaseType": 1,
+          "gameVersionTypeId": 88568
+        },
+        {
+          "gameVersion": "5.5.4",
+          "fileId": 9402468,
+          "releaseType": 1,
+          "gameVersionTypeId": 79434
+        },
+        {
+          "gameVersion": "2.5.6",
+          "fileId": 9402467,
+          "releaseType": 1,
+          "gameVersionTypeId": 73246
+        },
+        {
+          "gameVersion": "1.15.9",
+          "fileId": 9402466,
+          "releaseType": 1,
+          "gameVersionTypeId": 67408
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "index": 0,
+    "pageSize": 3,
+    "resultCount": 3,
+    "totalCount": 30
+  }
+}

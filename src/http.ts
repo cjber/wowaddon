@@ -173,10 +173,13 @@ export async function requestBytes(value: string, opts: HttpOptions = {}): Promi
     await reader?.cancel().catch(() => {});
   }
 }
+export async function requestText(url: string, opts: HttpOptions = {}): Promise<string> {
+  return new TextDecoder().decode(await requestBytes(url, opts));
+}
 export async function requestJson<T>(url: string, opts: HttpOptions = {}): Promise<T> {
-  const bytes = await requestBytes(url, opts);
+  const text = await requestText(url, opts);
   try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    return JSON.parse(text) as T;
   } catch {
     throw new WowaddonError("HTTP_JSON", "The server returned an invalid JSON response.");
   }

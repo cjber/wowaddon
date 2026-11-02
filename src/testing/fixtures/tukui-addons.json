@@ -1,0 +1,54 @@
+[
+  {
+    "id": -2,
+    "slug": "elvui",
+    "author": "Elv",
+    "name": "ElvUI",
+    "url": "https://api.tukui.org/v1/download/elvui/TOKEN",
+    "version": "16.00",
+    "changelog_url": "https://api.tukui.org/v1/changelog/elvui",
+    "ticket_url": "https://github.com/tukui-org/ElvUI/issues",
+    "git_url": "https://github.com/tukui-org/ElvUI",
+    "patch": ["12.1.0", "5.5.4", "1.15.9", "2.5.6"],
+    "last_update": "2026-10-13",
+    "web_url": "https://tukui.org/elvui",
+    "donate_url": "http://tukui.org/support",
+    "small_desc": "A user interface designed around user-friendliness with extra features that are not included in the standard UI.",
+    "desc": "## About\n\n**ElvUI** is a full user interface replacement for World of Warcraft, which means it completely replaces the Blizzard default UI.\n\n## Modules\n\n- **General** [e.g. Fonts, Textures, BlizzUI Im",
+    "screenshot_url": "https://storage.tukui.org/ElvUI-1.jpg",
+    "gallery_url": [
+      "https://storage.tukui.org/ElvUI-2.jpg",
+      "https://storage.tukui.org/ElvUI-3.jpg",
+      "https://storage.tukui.org/ElvUI-4.jpg"
+    ],
+    "logo_url": "https://storage.tukui.org/ElvUI-Logo.png",
+    "logo_square_url": "https://storage.tukui.org/ElvUI-Logo-Square.png",
+    "directories": ["ElvUI", "ElvUI_Libraries", "ElvUI_Options"]
+  },
+  {
+    "id": -1,
+    "slug": "tukui",
+    "author": "Tukz",
+    "name": "Tukui",
+    "url": "https://api.tukui.org/v1/download/tukui/TOKEN",
+    "version": "20.463",
+    "changelog_url": "https://api.tukui.org/v1/changelog/tukui",
+    "ticket_url": "https://github.com/tukui-org/Tukui/issues",
+    "git_url": "https://github.com/tukui-org/Tukui",
+    "patch": ["11.1.7", "5.5.0", "1.15.7"],
+    "last_update": "2025-12-05",
+    "web_url": "https://tukui.org/tukui",
+    "donate_url": "http://tukui.org/support",
+    "small_desc": "Minimalistic and lightweight World of Warcraft user interface.",
+    "desc": "Minimalistic and lightweight World of Warcraft user interface.",
+    "screenshot_url": "https://storage.tukui.org/Tukui-1.jpg",
+    "gallery_url": [
+      "https://storage.tukui.org/Tukui-2.jpg",
+      "https://storage.tukui.org/Tukui-3.jpg",
+      "https://storage.tukui.org/Tukui-4.jpg"
+    ],
+    "logo_url": "https://storage.tukui.org/Tukui-Logo.png",
+    "logo_square_url": "https://storage.tukui.org/Tukui-Logo-Square.png",
+    "directories": ["Tukui"]
+  }
+]

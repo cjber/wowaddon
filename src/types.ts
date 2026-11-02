@@ -50,3 +50,40 @@ export interface Context {
   backups: { dir: string; keep: number };
   notices: string[];
 }
+// One addon as a search or browse result. ref is what add takes as is.
+export interface Listing {
+  ref: string;
+  kind: SourceKind;
+  name: string;
+  summary: string;
+  authors: string[];
+  downloads: number | null;
+  updated: string | null;
+  categories: string[];
+  gameVersions: string[];
+  flavors: Flavor[];
+  url: string;
+}
+export interface AddonInfo extends Listing {
+  version: string | null;
+  links: Record<string, string>;
+  folders: string[];
+  description: string;
+  changelog: { version: string | null; text: string } | null;
+}
+export type Sort = "relevance" | "downloads" | "updated" | "name";
+export type BrowseMode = "popular" | "trending" | "updated";
+export interface SourceReport {
+  kind: SourceKind;
+  status: "ok" | "skipped" | "failed";
+  count: number;
+  message?: string;
+  code?: string;
+}
+export interface Category {
+  kind: SourceKind;
+  id: string;
+  name: string;
+  parent?: string;
+  count?: number;
+}

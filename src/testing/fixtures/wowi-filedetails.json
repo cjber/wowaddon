@@ -1,0 +1,19 @@
+[
+  {
+    "UID": "3896",
+    "UICATID": "24",
+    "UIVersion": "v1.54.04",
+    "UIDate": 1792507606000,
+    "UIMD5": "1dbbbc27dcd70d4010bb9aee49c5a62d",
+    "UIFileName": "Atlas-v1.54.04.zip",
+    "UIDownload": "https://cdn.wowinterface.com/downloads/getfile.php?id=3896&d=1792507606&minion",
+    "UIPending": "0",
+    "UIName": "Atlas",
+    "UIAuthorName": "arith",
+    "UIDescription": "[URL=\"https://www.paypal.me/ArithHsu\"]Make a Donation via Paypal[/URL]\r\n\r\n[COLOR=SlateGray]Atlas, a World of Warcraft instance map browser\r\nCopyright 2005 - 2010 Dan Gilbert\r\nCopyright 2010 - Lothaer\r\nCopyright 2011 ~ 2022 - Arith, Atlas Team[/COLOR]\r\n\r\n[COLOR=DarkOrange][SIZE=5]About Atlas[/SIZE][/COLOR]\r\n\r\nAtlas is an addon for World of Warcraft that includes detailed maps for every instance in ",
+    "UIChangeLog": "Atlas, a World of Warcraft instance map browser\r\nCopyright 2005 ~ 2010 - Dan Gilbert <dan.b.gilbert at gmail dot com>\r\nCopyright 2010 - Lothaer <lothayer at gmail dot com>, Atlas Team\r\nCopyright 2011 ~ 2026 - Arith Hsu, Atlas Team \r\n\r\n==============\r\nKnown Issues:\r\n==============\r\n- User might see the boss loots are not fully loaded and showing item info \r\n  is retrieving. If that's the case, user",
+    "UIHitCount": "4727819",
+    "UIHitCountMonthly": "653",
+    "UIFavoriteTotal": "5328"
+  }
+]

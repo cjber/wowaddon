@@ -1,0 +1,86 @@
+{
+  "addons": [
+    {
+      "id": 47671,
+      "repository": "https://github.com/Questie/Questie",
+      "repository_name": "Questie",
+      "source": "GitHub",
+      "description": "<h1>Questie</h1><p><a href=\"https://discord.gg/s33MAYKeZd\"><img src=\"https://img.shields.io/badge/discord-Questie-738bd7\" alt=\"Discord\"></a><a href=\"https://img.shields.io/github/stars/Questie/Questie",
+      "homepage": "",
+      "owner_name": "Questie",
+      "total_download_count": 4600659,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-11-02T13:51:34.000Z",
+          "tag_name": "bundle/v12.4.0+v1.0.10",
+          "prerelease": false,
+          "game_type": "mists",
+          "toc_title": "Questie v12.4.0",
+          "game_versions": [
+            {
+              "game_type": "unknown",
+              "interface": "00000",
+              "title": "Questie game client not supported",
+              "authors": ""
+            },
+            {
+              "game_type": "classic",
+              "interface": "11509",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            },
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "Questie v12.4.0",
+              "authors": "Aero/Logon/Muehe/TheCrux(BreakBB)/Drejjmit/Dyaxler/Cheeq/TechnoHunter/Yttrium/Everyone else"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "Questie"
+            },
+            {
+              "folder_name": "QuestieDB"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2797963,
+      "repository": "https://github.com/xenathe/XenQuest",
+      "repository_name": "XenQuest",
+      "source": "GitHub",
+      "description": "<p>A lightweight, customisable quest tracker for World of Warcraft.</p>",
+      "homepage": "",
+      "owner_name": "xenathe",
+      "total_download_count": 33,
+      "topics": [],
+      "releases": [
+        {
+          "published_at": "2026-10-23T13:54:08.000Z",
+          "tag_name": "v0.2.24-beta",
+          "prerelease": false,
+          "game_type": "forever",
+          "toc_title": "XenQuest",
+          "game_versions": [
+            {
+              "game_type": "forever",
+              "interface": "16001",
+              "title": "XenQuest",
+              "authors": "XenQuest"
+            }
+          ],
+          "addonFolders": [
+            {
+              "folder_name": "XenQuest"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "count": 2
+}

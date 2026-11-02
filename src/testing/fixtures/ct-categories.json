@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "id": 1002,
+      "name": "Auction & Economy",
+      "parentCategoryId": 1
+    },
+    {
+      "id": 1011,
+      "name": "Map & Minimap",
+      "parentCategoryId": 1
+    },
+    {
+      "id": 1055,
+      "name": "Tooltip",
+      "parentCategoryId": 1
+    },
+    {
+      "id": 1009,
+      "name": "Bags & Inventory",
+      "parentCategoryId": 1
+    },
+    {
+      "id": 1052,
+      "name": "Mining",
+      "parentCategoryId": 1015
+    },
+    {
+      "id": 1015,
+      "name": "Professions",
+      "parentCategoryId": 1
+    },
+    {
+      "id": 1013,
+      "name": "Quests & Leveling",
+      "parentCategoryId": 1
+    }
+  ]
+}
