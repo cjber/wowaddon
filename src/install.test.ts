@@ -6,12 +6,12 @@ import { setFetch } from "./http";
 import {
   DEV_SKIPPED,
   installAddon,
-  LOCK_MAX_AGE_MS,
   pendingPath,
   protectedFolder,
   removeInstalled,
   withInstallLock,
 } from "./install";
+import { LOCK_MAX_AGE_MS } from "./lock";
 import { readState, type State, writeState } from "./state";
 import { offline, tempContext, zip } from "./testing/helpers";
 import type { Entry, Installed, Release } from "./types";
