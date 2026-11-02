@@ -65,15 +65,15 @@ None.
 
 ## Zones
 
-| Path                                                       | Zone    | Reason                                                 |
-| ---------------------------------------------------------- | ------- | ------------------------------------------------------ |
-| `src/**/*.test.ts`, `src/**/*.test.tsx`                    | test    | colocated `bun test` specs                             |
-| `src/testing/helpers.ts`                                   | test    | offline `fetch` stubs and zip builders shared by tests |
-| `src/testing/fixtures/`                                    | fixture | recorded public API responses; never edited by cleanup |
-| `bin/`                                                     | script  | launcher                                               |
-| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig` | config  |                                                        |
-| `README.md`, `CHANGELOG.md`, `addons.example.txt`          | docs    |                                                        |
-| `.sloppatrol/gate.py`, `.sloppatrol/agents.py`, `.sloppatrol/LICENSE`        | vendor  | copied byte for byte from Sloppatrol                  |
+| Path                                                                  | Zone    | Reason                                                 |
+| --------------------------------------------------------------------- | ------- | ------------------------------------------------------ |
+| `src/**/*.test.ts`, `src/**/*.test.tsx`                               | test    | colocated `bun test` specs                             |
+| `src/testing/helpers.ts`                                              | test    | offline `fetch` stubs and zip builders shared by tests |
+| `src/testing/fixtures/`                                               | fixture | recorded public API responses; never edited by cleanup |
+| `bin/`                                                                | script  | launcher                                               |
+| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig`            | config  |                                                        |
+| `README.md`, `CHANGELOG.md`, `addons.example.txt`                     | docs    |                                                        |
+| `.sloppatrol/gate.py`, `.sloppatrol/agents.py`, `.sloppatrol/LICENSE` | vendor  | copied byte for byte from Sloppatrol                   |
 
 ## Conventions
 
