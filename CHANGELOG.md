@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows-made packages whose folder entries end in a backslash, such as AtlasLoot Classic Forever
+  1.2.7, install instead of failing with "ZIP has a case collision or duplicate path".
+
 ## [2.0.1] - 2026-11-02
 
 ### Fixed
