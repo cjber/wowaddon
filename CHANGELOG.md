@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-02
+
 ### Fixed
 
 - `add` stopped by a folder installed outside wowaddon (`unmanaged`) no longer writes the addon to
