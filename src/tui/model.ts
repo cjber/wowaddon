@@ -1,7 +1,9 @@
 import { parseRef } from "../service";
 import type { Flavor, Progress, Row, SourceKind } from "../types";
+import { type BrowseState, initBrowse } from "./browse";
 
 export type Mode = "list" | "add" | "remove-confirm" | "adopt-confirm" | "help";
+export type View = "installed" | "browse";
 
 export interface DetectedRef {
   kind: SourceKind;
@@ -13,6 +15,8 @@ export interface TuiState {
   addonsDir: string;
   rows: Row[];
   selected: number;
+  view: View;
+  browse: BrowseState;
   mode: Mode;
   addInput: string;
   addDetected?: DetectedRef;
@@ -30,6 +34,8 @@ export function initState(flavor: Flavor, addonsDir: string, rows: Row[] = []): 
     addonsDir,
     rows,
     selected: 0,
+    view: "installed",
+    browse: initBrowse(),
     mode: "list",
     addInput: "",
     progress: {},
@@ -49,6 +55,20 @@ export function selectedRow(state: TuiState): Row | undefined {
 export function moveSelection(state: TuiState, delta: number): TuiState {
   if (state.mode !== "list") return state;
   return { ...state, selected: clampSelection(state.selected + delta, state.rows.length) };
+}
+
+// Tab swaps views only from the plain list, and each view keeps its own cursor.
+export function switchView(state: TuiState): TuiState {
+  if (state.mode !== "list" || state.browse.typing) return state;
+  return { ...state, view: state.view === "installed" ? "browse" : "installed" };
+}
+
+export function updateBrowse(state: TuiState, change: (browse: BrowseState) => BrowseState) {
+  return { ...state, browse: change(state.browse) };
+}
+
+export function installedIds(state: TuiState): Set<string> {
+  return new Set(state.rows.map((row) => row.entry.id));
 }
 
 export function setRows(state: TuiState, rows: Row[]): TuiState {
@@ -204,6 +224,51 @@ export function shortenPath(path: string, home: string): string {
   return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }
 
-export const FOOTER_HINT = "u update  U all  a add  x remove  f flavor  r refresh  ? help  q quit";
+// Only the keys that work in the view on screen; the longest set sizes the keys line for both.
+export const KEYS: Record<View, string[]> = {
+  installed: [
+    "j/k move",
+    "pgup/pgdn page",
+    "u update",
+    "U all",
+    "a add",
+    "x remove",
+    "f flavor",
+    "r refresh",
+    "tab browse",
+    "? help",
+    "q quit",
+  ],
+  browse: [
+    "j/k move",
+    "pgup/pgdn page",
+    "h/l fold",
+    "/ search",
+    "o sort",
+    "enter details",
+    "i install",
+    "n/p results page",
+    "tab installed",
+    "q quit",
+  ],
+};
+// The keys line wraps between bindings, so count the rows the way the wrap fills them.
+export function keyLines(width: number): number {
+  const room = Math.max(width - 2, 1);
+  const rows = (keys: string[]) => {
+    let count = 1;
+    let used = 0;
+    keys.forEach((key, index) => {
+      const cell = key.length + (index < keys.length - 1 ? 3 : 0);
+      if (used && used + cell > room) {
+        count++;
+        used = 0;
+      }
+      used += cell;
+    });
+    return count;
+  };
+  return Math.max(...Object.values(KEYS).map(rows));
+}
 
 export const NARROW_WIDTH_COLUMNS = 80;

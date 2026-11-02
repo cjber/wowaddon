@@ -1,0 +1,10 @@
+{
+  "assets": [
+    { "download_count": 449, "name": "Questie-v12.4.0+v1.0.10.zip" },
+    { "download_count": 40, "name": "release.json" }
+  ],
+  "body": "## Questie 12.4.0\n\nBuild: [f8938f4](https://github.com/Questie/Questie/commit/f8938f4c3d4850070803d38e2e6744c05f2584f0)\n\n### New Features\n\n- Added quest focus buttons to the tracker ([BreakBB](https://github.com/Questie/Questie/commit/5137997ff7d2dd447103bdc652c5dc60abefd560))\n- Show tracked profession recipes in the tracker ([BreakBB](https://github.com/Questie/Questie/commit/f0c27c4d0dbd5ccb2f7865910551b90f8a9c0ae2))\n\n### General Fixes\n\n- Don't announce Day of the Dead in Era and TBC ([Cabro](https://github.com/Questie/Questie/commit/854582a36f8c0ee50bd2ced845420123973f6170))\n- Improved ques",
+  "html_url": "https://github.com/Questie/Questie/releases/tag/bundle/v12.4.0%2Bv1.0.10",
+  "published_at": "2026-11-02T13:51:34Z",
+  "tag_name": "bundle/v12.4.0+v1.0.10"
+}

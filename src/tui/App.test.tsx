@@ -4,7 +4,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import * as service from "../service";
 import { offline } from "../testing/helpers";
-import type { Context, Flavor, Row } from "../types";
+import type { Context, Flavor, Listing, Row } from "../types";
 import { App } from "./App";
 
 const context = (flavor: Flavor = "era"): Context => ({
@@ -14,6 +14,20 @@ const context = (flavor: Flavor = "era"): Context => ({
   backups: { dir: "/backups", keep: 5 },
   notices: [],
 });
+const listings = (count = 3): Listing[] =>
+  Array.from({ length: count }, (_, i) => ({
+    ref: `cf:${100 + i}`,
+    kind: "cf" as const,
+    name: `Map${i}`,
+    summary: `map addon ${i}`,
+    authors: ["someone"],
+    downloads: 1000 * (i + 1),
+    updated: "2026-10-01T00:00:00Z",
+    categories: [i % 2 ? "Bags" : "Map & Minimap"],
+    gameVersions: ["1.15.7"],
+    flavors: ["era" as const],
+    url: "https://example.com",
+  }));
 const row = (name = "Foo", status: Row["status"] = "missing"): Row => ({
   entry: {
     id: `gh:a/${name.toLowerCase()}`,
@@ -32,6 +46,8 @@ let list: ReturnType<typeof spyOn<typeof service, "listRows">>;
 let add: ReturnType<typeof spyOn<typeof service, "addAddon">>;
 let sync: ReturnType<typeof spyOn<typeof service, "syncAddons">>;
 let remove: ReturnType<typeof spyOn<typeof service, "removeAddon">>;
+let find: ReturnType<typeof spyOn<typeof service, "findAddons">>;
+let info: ReturnType<typeof spyOn<typeof service, "addonInfo">>;
 let setup: Awaited<ReturnType<typeof testRender>> | undefined;
 const quit = mock((_code: number) => {});
 beforeEach(() => {
@@ -42,13 +58,22 @@ beforeEach(() => {
   add = spyOn(service, "addAddon").mockResolvedValue(row("Added", "current"));
   sync = spyOn(service, "syncAddons").mockResolvedValue({ rows: [row("Foo", "current")] });
   remove = spyOn(service, "removeAddon").mockResolvedValue({ entry: row().entry, deleted: true });
+  find = spyOn(service, "findAddons").mockResolvedValue({ results: listings(), sources: [] });
+  info = spyOn(service, "addonInfo").mockImplementation(async (_ctx, ref) => ({
+    ...(listings().find((l) => l.ref === ref) ?? listings()[0]),
+    version: "2.0",
+    links: {},
+    folders: ["Map"],
+    description: "Long description.",
+    changelog: { version: "2.0", text: "- new zoom" },
+  }));
 });
 afterEach(async () => {
   await act(async () => {
     setup?.renderer.destroy();
   });
   setup = undefined;
-  for (const spy of [open, list, add, sync, remove]) spy.mockRestore();
+  for (const spy of [open, list, add, sync, remove, find, info]) spy.mockRestore();
 });
 async function start(props: { flavor?: Flavor; addonsDir?: string } = {}) {
   setup = await testRender(<App {...props} onQuit={quit} />, { width: 100, height: 24 });
@@ -234,13 +259,13 @@ test("40 addons fit in 100x24 with clipping indicators, footer and selected row 
   await start();
   let output = await frame();
   expect(output).toMatch(/↓ \d+ more/);
-  expect(output).toContain("u update  U all");
+  expect(output).toContain("u update · U all");
   for (let i = 0; i < 39; i++) await press("ARROW_DOWN");
   output = await frame();
   expect(output).toContain("› Addon39");
   expect(output).toContain("gh:a/addon39");
   expect(output).toMatch(/↑ \d+ more/);
-  expect(output).toContain("u update  U all");
+  expect(output).toContain("u update · U all");
   const marker = setup
     ?.captureSpans()
     .lines.flatMap((line) => line.spans)
@@ -251,7 +276,7 @@ test("40 addons fit in 100x24 with clipping indicators, footer and selected row 
   });
   output = await frame();
   expect(output).toContain("› Addon39");
-  expect(output).toContain("u update  U all");
+  expect(output).toContain("u update · U all");
 });
 
 test("Ctrl+C also aborts an active removal", async () => {
@@ -264,4 +289,78 @@ test("Ctrl+C also aborts an active removal", async () => {
   });
   expect(quit).toHaveBeenCalledWith(130);
   expect(remove.mock.calls[0][2]?.signal?.aborted).toBe(true);
+});
+
+const lineOf = (output: string, text: string) =>
+  output.split("\n").findIndex((line) => line.includes(text));
+
+test("browse loads trending once, groups by category and installs with one key", async () => {
+  add.mockImplementation(async (_ctx, ref) => ({
+    ...row("Map0", "current"),
+    entry: { id: ref, kind: "cf", ref: ref.slice(3), note: "Map0" },
+  }));
+  await start();
+  let output = await press("TAB");
+  expect(find).toHaveBeenCalledTimes(1);
+  expect(find.mock.calls[0][1]).toMatchObject({ order: "trending", page: 1 });
+  output = await frame();
+  expect(output).toContain("wowaddon · browse · era · trending");
+  expect(output).toContain("▾ Map & Minimap 2");
+  expect(output).toContain("▾ Bags 1");
+  await press("RETURN");
+  output = await frame();
+  expect(info.mock.calls[0][1]).toBe("cf:100");
+  expect(output).toContain("changelog 2.0: - new zoom");
+  await press("i");
+  expect(add.mock.calls[0]).toMatchObject([
+    expect.anything(),
+    "cf:100",
+    { note: "Map0", install: true },
+  ]);
+  output = await frame();
+  expect(output).toContain("✓ Map0");
+  await press("TAB");
+  await press("TAB");
+  expect(find).toHaveBeenCalledTimes(1);
+});
+
+test("/ searches by best match, o cycles the sort and h folds a group", async () => {
+  await start();
+  await press("TAB");
+  await press("/");
+  await act(async () => {
+    await setup?.mockInput.typeText("questie");
+  });
+  await press("RETURN");
+  expect(find.mock.calls[1][1]).toMatchObject({ text: "questie", order: "relevance", page: 1 });
+  expect(await frame()).toContain('"questie" · best match');
+  await press("o");
+  expect(find.mock.calls[2][1]).toMatchObject({ text: "questie", order: "downloads" });
+  await press("n");
+  expect(find.mock.calls[3][1]).toMatchObject({ order: "downloads", page: 2 });
+  await press("h");
+  expect(await frame()).toContain("▸ Map & Minimap 2");
+  expect(await frame()).not.toContain("Map0  ");
+});
+
+test("switching views keeps the page height and each view's scroll position", async () => {
+  list.mockResolvedValue(
+    Array.from({ length: 40 }, (_, i) => row(`Addon${i.toString().padStart(2, "0")}`)),
+  );
+  find.mockResolvedValue({ results: listings(30), sources: [] });
+  await start();
+  for (let i = 0; i < 25; i++) await press("j");
+  const installed = await frame();
+  const keysRow = lineOf(installed, "j/k move");
+  const statusRow = keysRow - 1;
+  await press("TAB");
+  await press("END");
+  const browse = await frame();
+  expect(lineOf(browse, "j/k move")).toBe(keysRow);
+  expect(browse.split("\n").length).toBe(installed.split("\n").length);
+  await press("TAB");
+  expect(await frame()).toBe(installed);
+  expect(lineOf(installed, "› Addon25")).toBeLessThan(statusRow);
+  await press("TAB");
+  expect(await frame()).toBe(browse);
 });

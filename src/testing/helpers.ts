@@ -13,6 +13,7 @@ import type { Context, Flavor } from "../types";
 
 export async function tempContext(
   flavor: Flavor = "forever",
+  env: NodeJS.ProcessEnv = {},
 ): Promise<{ ctx: Context; root: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "wowaddon-test-"));
   const addonsDir = join(root, "Interface", "AddOns");
@@ -20,7 +21,13 @@ export async function tempContext(
   const ctx = await openContext({
     flavor,
     addonsDir,
-    env: { HOME: root, XDG_CONFIG_HOME: join(root, "config"), GH_TOKEN: "test-gh", CF_API_KEY: "" },
+    env: {
+      HOME: root,
+      XDG_CONFIG_HOME: join(root, "config"),
+      GH_TOKEN: "test-gh",
+      CF_API_KEY: "",
+      ...env,
+    },
   });
   return { ctx, root, cleanup: () => rm(root, { recursive: true, force: true }) };
 }

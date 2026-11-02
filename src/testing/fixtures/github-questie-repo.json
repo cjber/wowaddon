@@ -1,0 +1,20 @@
+{
+  "archived": false,
+  "description": "Questie: The WoW Classic quest helper",
+  "full_name": "Questie/Questie",
+  "homepage": "",
+  "html_url": "https://github.com/Questie/Questie",
+  "owner": { "login": "Questie" },
+  "pushed_at": "2026-11-02T13:52:10Z",
+  "stargazers_count": 1119,
+  "topics": [
+    "addon",
+    "lua",
+    "quest",
+    "questie",
+    "world-of-warcraft",
+    "world-of-warcraft-classic",
+    "wow",
+    "wow-addon"
+  ]
+}

@@ -1,5 +1,7 @@
+import { type AdoptionPlan, planAdoption, type Untracked, untrackedFolders } from "./adopt";
 import { backupWtf } from "./backup";
 import { openContext as openConfiguredContext } from "./config";
+import { categories, discover, type Query, addonInfo as sourceInfo } from "./discover";
 import { checkAbort } from "./http";
 import {
   beginProtectionChecks,
@@ -19,14 +21,18 @@ import { resolveWago } from "./sources/wago";
 import { resolveWowinterface } from "./sources/wowinterface";
 import { readState, type State } from "./state";
 import {
+  type AddonInfo,
+  type Category,
   type Context,
   type Entry,
   type Flavor,
   type Installed,
+  type Listing,
   type Progress,
   type Release,
   type Row,
   type SourceKind,
+  type SourceReport,
   WowaddonError,
 } from "./types";
 
@@ -340,4 +346,58 @@ export async function removeAddon(
     );
     return { entry, installed, deleted };
   });
+}
+
+export type { AdoptionPlan, Query, Untracked };
+// Search and browse ask every searchable source at once; a source that fails or cannot answer the
+// query is reported in sources while the rest still answer.
+export function findAddons(
+  ctx: Context,
+  query: Query,
+  opts: { sources?: SourceKind[]; signal?: AbortSignal } = {},
+): Promise<{ results: Listing[]; sources: SourceReport[] }> {
+  return discover(ctx, query, opts);
+}
+export function addonInfo(ctx: Context, ref: string, signal?: AbortSignal): Promise<AddonInfo> {
+  return sourceInfo(ctx, ref, signal);
+}
+export function listCategories(
+  ctx: Context,
+  signal?: AbortSignal,
+): Promise<{ categories: Category[]; sources: SourceReport[] }> {
+  return categories(ctx, signal);
+}
+// Installed folders no manifest addon owns, with the dev links and non-addon folders left out.
+export async function listUntracked(ctx: Context): Promise<Untracked[]> {
+  return (await untrackedFolders(ctx, await readState(ctx))).untracked;
+}
+// Takes over installed addons wowaddon does not manage yet: each one matched to a source is added
+// to the manifest and synced with adopt, behind one WTF snapshot. A dry run only plans.
+export async function adoptAddons(
+  ctx: Context,
+  opts: {
+    wowup?: string | false;
+    dryRun?: boolean;
+    backup?: boolean;
+    signal?: AbortSignal;
+    onProgress?: (p: Progress) => void;
+  },
+): Promise<{ plan: AdoptionPlan; rows: Row[]; backup?: string }> {
+  const { manifest } = await entries(ctx, true, opts.signal);
+  const plan = await planAdoption(ctx, manifest, opts);
+  if (opts.dryRun || !plan.matches.length) return { plan, rows: [] };
+  for (const match of plan.matches.filter((m) => !m.inManifest))
+    await addAddon(ctx, match.entry.id, {
+      note: match.entry.note,
+      install: false,
+      signal: opts.signal,
+    });
+  const { rows, backup } = await syncAddons(ctx, {
+    ids: plan.matches.map((match) => match.entry.id),
+    adopt: true,
+    backup: opts.backup,
+    signal: opts.signal,
+    onProgress: opts.onProgress,
+  });
+  return { plan, rows, backup };
 }

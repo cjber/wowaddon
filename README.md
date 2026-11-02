@@ -1,8 +1,11 @@
 # wowaddon
 
-CLI and terminal UI for managing WoW addons from GitHub, CurseForge, WoWInterface, Tukui and
-Wago Addons. One manifest per flavor, no CurseForge API key, JSON output and a schema for coding
-agents, and a small keyboard-driven TUI for anyone who would rather not remember the flags.
+A complete replacement for WowUp: find, install, update and remove WoW addons from GitHub,
+CurseForge, WoWInterface, Tukui and Wago Addons, from the command line or a keyboard-driven TUI.
+Search and browse cover the same ground as the addon websites, `adopt` takes over everything WowUp
+(or anything else) installed, and every command has JSON output and a schema, so a coding agent
+can go from search to an installed addon without scraping a web page. One manifest per flavor and
+no CurseForge API key needed.
 
 ## Install
 
@@ -26,6 +29,11 @@ ln -sf "$PWD/bin/wowaddon" ~/.local/bin/wowaddon
 
 ```sh
 wowaddon                               # TUI in a terminal, otherwise sync
+wowaddon search <words...> [--sort relevance|downloads|updated|name] [--category NAME]
+wowaddon browse [popular|trending|updated|name] [--category NAME]
+wowaddon info <ref|url>                # summary, authors, downloads, versions, links, changelog
+wowaddon categories                    # category names that --category takes
+wowaddon adopt [--dry-run] [--wowup PATH] [--no-wowup] [--no-backup]
 wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]
 wowaddon check [<id|ref>...]           # what sync would install or update
 wowaddon add <ref|url> [--note TEXT] [--no-install] [--adopt] [--dry-run]
@@ -34,6 +42,9 @@ wowaddon remove <id|ref> [--dry-run]
 wowaddon list [--refresh]
 wowaddon schema                        # commands, flags, JSON shapes and exit codes as JSON
 ```
+
+`search` and `browse` also take `--source cf,gh,wowi,tukui`, `--limit N` (up to 50, default 20),
+`--page N` and `--all-flavors`.
 
 Global options: `--flavor era|forever`, `--addons-dir PATH`, `--json`, `-h/--help`, `-V/--version`.
 
@@ -52,22 +63,32 @@ AddOns folder as they are.
 
 ### TUI
 
-Runs when both stdin and stdout are a terminal and no subcommand is given.
+Runs when both stdin and stdout are a terminal and no subcommand is given. `tab` switches between
+the installed list and the browse view. Both share one frame, a header with the view, flavor and
+position, the list, a detail pane, a status line and the keys line, so switching views never
+moves a line, and each view keeps its own place.
 
-| Key              | Action                                                   |
-| ---------------- | -------------------------------------------------------- |
-| `↑`/`k`, `↓`/`j` | move the selection                                       |
-| `u`              | update the selected addon, or take over an unmanaged one |
-| `U`              | update everything                                        |
-| `a`              | add an addon — paste a ref or URL, `Enter` installs      |
-| `x`              | remove the selected addon (`y` to confirm)               |
-| `f`              | cycle flavor (era / forever)                             |
-| `r`              | refresh latest versions                                  |
-| `?`              | help                                                     |
-| `q`, `Ctrl+C`    | quit                                                     |
+| Key                                                     | Installed                                                | Browse                                 |
+| ------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------- |
+| `j`/`k`, `pgup`/`pgdn`, `ctrl-d`/`ctrl-u`, `home`/`end` | move                                                     | move                                   |
+| `u`                                                     | update the selected addon, or take over an unmanaged one |                                        |
+| `U`                                                     | update everything                                        |                                        |
+| `a`                                                     | add an addon: paste a ref or URL, `Enter` installs       |                                        |
+| `x`                                                     | remove the selected addon (`y` to confirm)               |                                        |
+| `/`                                                     |                                                          | search; `Enter` runs it, `Esc` cancels |
+| `o`                                                     |                                                          | cycle the sort                         |
+| `h`/`l`, `Enter` on a group                             |                                                          | fold and open a category group         |
+| `Enter`                                                 |                                                          | load details and the latest changelog  |
+| `i`                                                     |                                                          | install the selected addon             |
+| `n`/`p`                                                 |                                                          | next and previous page of results      |
+| `f`                                                     | cycle flavor (era / forever)                             | cycle flavor                           |
+| `r`                                                     | refresh latest versions                                  | run the search again                   |
+| `?`                                                     | help                                                     |                                        |
+| `q`, `Ctrl+C`                                           | quit                                                     | quit                                   |
 
-No borders, no colour overrides beyond the terminal's own dim/bold — it should look like it
-belongs on your machine, not like a dashboard.
+Browse opens on trending addons for the flavor, grouped by category with counts; a group of more
+than 20 starts folded. Installed results carry a `✓`. Colours are the terminal's own palette
+entries, so they follow its theme.
 
 ## Flavors
 
@@ -103,6 +124,39 @@ Supporter tier on [Patreon](https://www.patreon.com/wagoio) (see
 key to `~/.config/wowaddon/wago_token`. It is sent only to `addons.wago.io`. Without one, a
 `wago` addon fails with `WAGO_KEY_MISSING` and everything else syncs as usual.
 
+## Finding addons
+
+`search` asks every source that can be searched without a paid key at once and merges the
+results, filtered to addons that support the current flavor unless `--all-flavors`. `browse`
+lists the most downloaded (`popular`), `trending`, recently `updated` or alphabetical addons,
+optionally in one `--category`. Each result carries a `ref` that `add` and `info` take as is, so
+`wowaddon search map` → `wowaddon info cf:1735937` → `wowaddon add cf:1735937` is the whole loop.
+A source that cannot answer a query is skipped and named on stderr (and in `sources` with
+`--json`); the rest still answer.
+
+What each source can match of its website:
+
+| Source       | Search and browse                                                                                                               | Cannot match                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| CurseForge   | search, every sort, categories, details and changelog, via its v1 API (`CF_API_KEY`, else the keyless `api.curse.tools` mirror) | screenshots and comments                                                                                           |
+| GitHub       | WowUp Hub's index of GitHub addons with packaged releases; info from the GitHub API                                             | categories; trending is the Hub's featured list; a repo without packaged releases is not indexed, so add it by URL |
+| WoWInterface | its full file list, cached six hours and searched locally; downloads, monthly trending, categories                              | no WoW: Forever compatibility tag, so Forever searches skip it unless `--all-flavors`; no summary in listings      |
+| Tukui        | ElvUI and Tukui, the only two addons its API lists                                                                              | download counts and categories                                                                                     |
+| Wago         | not searched                                                                                                                    | its API needs a paid Patreon key and has no public search; add by URL or `wago:<slug>`                             |
+
+## Coming from WowUp
+
+wowaddon does everything WowUp did, so WowUp can go. `wowaddon adopt` takes over the addons
+already installed: every AddOns folder no manifest line owns is matched to a source by WowUp's own
+record of it (read only, from `~/.config/WowUp`, `~/.config/WowUpCf`, or the `AppData/Roaming`
+folder of a Wine prefix under `~/Games` or `~/.wine`; `--wowup PATH` names another), then the
+project ID in its TOC (`X-Curse-Project-ID`, `X-WoWI-ID`, `X-Tukui-ProjectID`), then a search by
+its TOC title that is kept only when that addon ships a folder of the same name. A manifest line
+not yet installed that names the folder wins over a new one, so nothing is listed twice. The
+matches are added and installed fresh behind one WTF backup; `--dry-run` shows the plan, and
+anything it cannot match is listed so you can add it by URL. `check` lists the folders still
+untracked. Dev links are never touched. WowUp's own files are only read, never changed.
+
 ## Manifest and config
 
 State lives under `${XDG_CONFIG_HOME:-~/.config}/wowaddon/`:
@@ -111,6 +165,7 @@ State lives under `${XDG_CONFIG_HOME:-~/.config}/wowaddon/`:
 - `era.txt` / `forever.txt`: one `kind ref  # note` per line (see `addons.example.txt`)
 - `state/<flavor>.json`: installed versions and owned folders, written atomically
 - `cache/cf-slugs.json`: CurseForge slug-to-id cache
+- `cache/wowi-filelist.json`: WoWInterface file list for search, refreshed after six hours
 
 A pre-existing `addons.txt` is copied to `era.txt` the first time `era.txt` is missing; the
 original is left alone and wowaddon says so once.
@@ -149,8 +204,13 @@ Every command is safe for cron, a shell alias or a coding agent: no prompts and 
 With `--json` each run prints exactly one JSON document on stdout and keeps progress on stderr:
 
 ```json
-{ "schemaVersion": 1, "command": "check", "flavor": "forever", "addonsDir": "...", "updates": 1, "addons": [Row] }
+{ "schemaVersion": 1, "command": "check", "flavor": "forever", "addonsDir": "...", "updates": 1, "addons": [Row], "untracked": [{ "folder": "Atlas" }] }
 ```
+
+`search` and `browse` print `{ results: Listing[], sources: SourceReport[] }`, where a listing is
+`{ ref, kind, name, summary, authors, downloads, updated, categories, gameVersions, flavors, url }`;
+`info` prints `{ addon }` with that plus `version`, `links`, `folders`, `description` and
+`changelog`; `adopt` prints `{ matches, addons, unmatched, skipped, backup }`.
 
 A row is `{ entry, installed?, latest?, status, message?, code? }`, where `status` is one of
 `missing`, `update`, `current`, `unknown`, `dev`, `unmanaged` or `error`, and `code` is the typed

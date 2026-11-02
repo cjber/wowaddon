@@ -1,0 +1,189 @@
+[
+  {
+    "UID": "3826",
+    "UICATID": "19",
+    "UIVersion": "11.0.2.3",
+    "UIDate": 1724089877000,
+    "UIName": "CTMod",
+    "UIAuthorName": "DahkCeles",
+    "UIFileInfoURL": "https://www.wowinterface.com/downloads/info3826-CTMod.html",
+    "UIDownloadTotal": "598624",
+    "UIDownloadMonthly": "41",
+    "UICompatibility": [
+      {
+        "version": "11.0.2",
+        "name": "The War Within"
+      },
+      {
+        "version": "4.4.0",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "1.15.2",
+        "name": "Classic"
+      }
+    ],
+    "UIDir": [
+      "CT_BarMod",
+      "CT_BottomBar",
+      "CT_BuffMod",
+      "CT_Core",
+      "CT_ExpenseHistory",
+      "CT_Library",
+      "CT_MailMod",
+      "CT_MapMod",
+      "CT_PartyBuffs",
+      "CT_RaidAssist",
+      "CT_Timer",
+      "CT_UnitFrames",
+      "CT_Viewport"
+    ]
+  },
+  {
+    "UID": "3896",
+    "UICATID": "24",
+    "UIVersion": "v1.54.04",
+    "UIDate": 1792507606000,
+    "UIName": "Atlas",
+    "UIAuthorName": "arith",
+    "UIFileInfoURL": "https://www.wowinterface.com/downloads/info3896-Atlas.html",
+    "UIDownloadTotal": "4727819",
+    "UIDownloadMonthly": "653",
+    "UICompatibility": [
+      {
+        "version": "12.1.0",
+        "name": "Curse of Ulatek"
+      },
+      {
+        "version": "1.15.7",
+        "name": "Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "2.5.4",
+        "name": "TBC Patch"
+      }
+    ],
+    "UIDir": ["Atlas"]
+  },
+  {
+    "UID": "6096",
+    "UICATID": "21",
+    "UIVersion": "26.10.30",
+    "UIDate": 1793344099000,
+    "UIName": "HealBot Continued",
+    "UIAuthorName": "Strife[CUK]",
+    "UIFileInfoURL": "https://www.wowinterface.com/downloads/info6096-HealBotContinued.html",
+    "UIDownloadTotal": "3578078",
+    "UIDownloadMonthly": "523",
+    "UICompatibility": [
+      {
+        "version": "12.1.0",
+        "name": "Curse of Ulatek"
+      },
+      {
+        "version": "1.15.7",
+        "name": "Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      }
+    ],
+    "UIDir": ["HealBot", "HealBot_ExtraSkins", "HealBot_Tips"]
+  },
+  {
+    "UID": "7032",
+    "UICATID": "24",
+    "UIVersion": "v4.3.13-release",
+    "UIDate": 1792849717000,
+    "UIName": "TomTom",
+    "UIAuthorName": "Cladhaire",
+    "UIFileInfoURL": "https://www.wowinterface.com/downloads/info7032-TomTom.html",
+    "UIDownloadTotal": "3554120",
+    "UIDownloadMonthly": "1419",
+    "UICompatibility": [
+      {
+        "version": "12.1.0",
+        "name": "Curse of Ulatek"
+      },
+      {
+        "version": "12.1.0",
+        "name": "Curse of Ulatek"
+      },
+      {
+        "version": "12.0.7",
+        "name": "Revelations"
+      },
+      {
+        "version": "1.15.7",
+        "name": "Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "2.5.4",
+        "name": "TBC Patch"
+      }
+    ],
+    "UIDir": ["TomTom"]
+  },
+  {
+    "UID": "8814",
+    "UICATID": "45",
+    "UIVersion": "11.2.15",
+    "UIDate": 1757932228000,
+    "UIName": "Deadly Boss Mods",
+    "UIAuthorName": "MysticalOS",
+    "UIFileInfoURL": "https://www.wowinterface.com/downloads/info8814-DeadlyBossMods.html",
+    "UIDownloadTotal": "2996101",
+    "UIDownloadMonthly": "137",
+    "UICompatibility": [
+      {
+        "version": "11.2.0",
+        "name": "Ghosts of K'aresh"
+      },
+      {
+        "version": "1.15.7",
+        "name": "Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "4.4.2",
+        "name": "Cataclysm Classic"
+      },
+      {
+        "version": "3.4.3",
+        "name": "WOTLK Patch"
+      },
+      {
+        "version": "2.5.4",
+        "name": "TBC Patch"
+      }
+    ],
+    "UIDir": [
+      "DBM-Core",
+      "DBM-Affixes",
+      "DBM-Brawlers",
+      "DBM-KhazAlgar",
+      "DBM-Raids-WarWithin",
+      "DBM-GUI",
+      "DBM-StatusBarTimers",
+      "DBM-VPVEM",
+      "DBM-Test",
+      "DBM-Test-WarWithin"
+    ]
+  }
+]

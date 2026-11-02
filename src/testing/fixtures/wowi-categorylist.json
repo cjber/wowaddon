@@ -1,0 +1,26 @@
+[
+  {
+    "UICATID": "19",
+    "UICATTitle": "Action Bar Mods",
+    "UICATFileCount": "321",
+    "UICATParentIDs": ["0", "23"]
+  },
+  {
+    "UICATID": "21",
+    "UICATTitle": "Unit Mods",
+    "UICATFileCount": "266",
+    "UICATParentIDs": ["0", "23"]
+  },
+  {
+    "UICATID": "24",
+    "UICATTitle": "Map, Coords, Compasses",
+    "UICATFileCount": "945",
+    "UICATParentIDs": ["0", "23"]
+  },
+  {
+    "UICATID": "45",
+    "UICATTitle": "Raid Mods",
+    "UICATFileCount": "591",
+    "UICATParentIDs": ["0", "23"]
+  }
+]

@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
-import { addAddon, listRows, openContext, removeAddon, syncAddons } from "../service";
-import type { Context, Flavor, Progress, Row } from "../types";
+import {
+  addAddon,
+  addonInfo,
+  findAddons,
+  listRows,
+  openContext,
+  removeAddon,
+  syncAddons,
+} from "../service";
+import type { Context, Flavor, Listing, Progress, Row } from "../types";
+import { failedResults, initBrowse, loadingResults, PAGE_LIMIT, setResults } from "./browse";
 import {
   cancelAdd,
   cancelConfirm,
@@ -12,6 +21,7 @@ import {
   setRows,
   setWorking,
   type TuiState,
+  updateBrowse,
 } from "./model";
 
 export type UpdateState = (update: (state: TuiState) => TuiState) => void;
@@ -31,6 +41,8 @@ export class AddonActions {
   private generation = 0;
   private refreshAbort?: AbortController;
   private workAbort?: AbortController;
+  private searchAbort?: AbortController;
+  private infoAbort?: AbortController;
 
   constructor(
     private update: UpdateState,
@@ -46,6 +58,8 @@ export class AddonActions {
   abort() {
     this.invalidateRefresh();
     this.workAbort?.abort();
+    this.searchAbort?.abort();
+    this.infoAbort?.abort();
   }
 
   private beginWork() {
@@ -88,6 +102,8 @@ export class AddonActions {
             addonsDir: ctx.addonsDir,
             selected: 0,
             progress: {},
+            // Another flavor has other addons, so its results start over.
+            browse: ctx.flavor === state.flavor ? state.browse : initBrowse(),
           },
           rows,
         ),
@@ -146,6 +162,74 @@ export class AddonActions {
     return this.mutate(async (ctx, opts) => {
       const row = await addAddon(ctx, input, { ...opts, install: true });
       return (state) => setRows(cancelAdd(state), mergeRows(state.rows, [row]));
+    });
+  }
+
+  // A search or browse page for the browse view's query, order and page. A newer one replaces it.
+  async search(browse: Pick<TuiState["browse"], "query" | "order" | "page">) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.searchAbort?.abort();
+    const controller = new AbortController();
+    this.searchAbort = controller;
+    this.update((state) => updateBrowse(state, loadingResults));
+    try {
+      const found = await findAddons(
+        ctx,
+        {
+          ...(browse.query ? { text: browse.query } : {}),
+          order: browse.order,
+          limit: PAGE_LIMIT,
+          page: browse.page,
+          allFlavors: false,
+        },
+        { signal: controller.signal },
+      );
+      if (this.searchAbort === controller && this.ctx === ctx)
+        this.update((state) =>
+          updateBrowse(state, (b) => setResults(b, found.results, found.sources)),
+        );
+    } catch (error) {
+      if (this.searchAbort === controller && this.ctx === ctx)
+        this.update((state) => updateBrowse(state, (b) => failedResults(b, message(error))));
+    } finally {
+      if (this.searchAbort === controller) this.searchAbort = undefined;
+    }
+  }
+
+  async loadInfo(ref: string) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.infoAbort?.abort();
+    const controller = new AbortController();
+    this.infoAbort = controller;
+    this.update((state) =>
+      updateBrowse(state, (b) => ({ ...b, infoLoading: ref, infoError: undefined })),
+    );
+    try {
+      const info = await addonInfo(ctx, ref, controller.signal);
+      if (this.infoAbort === controller)
+        this.update((state) =>
+          updateBrowse(state, (b) => ({ ...b, info, infoLoading: undefined })),
+        );
+    } catch (error) {
+      if (this.infoAbort === controller)
+        this.update((state) =>
+          updateBrowse(state, (b) => ({ ...b, infoLoading: undefined, infoError: message(error) })),
+        );
+    } finally {
+      if (this.infoAbort === controller) this.infoAbort = undefined;
+    }
+  }
+
+  runInstall(listing: Listing) {
+    return this.mutate(async (ctx, opts) => {
+      const row = await addAddon(ctx, listing.ref, { ...opts, note: listing.name, install: true });
+      return (state) =>
+        setRows(
+          setNotice(state, `installed ${listing.name} ${row.installed?.version ?? ""}`.trim()),
+          mergeRows(state.rows, [row]),
+        );
     });
   }
 

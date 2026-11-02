@@ -1,10 +1,12 @@
 ---
 
 name: wowaddon
-description: Install, update, check or remove World of Warcraft addons for Classic Era or WoW: Forever with the wowaddon CLI, from GitHub, CurseForge, WoWInterface, Tukui (ElvUI) or Wago Addons. Use for 'update my addons', 'install <addon>', 'which addons are outdated' or removing an addon.
+description: Find, install, update, check, adopt or remove World of Warcraft addons for Classic Era or WoW: Forever with the wowaddon CLI, the user's replacement for WowUp, from GitHub, CurseForge, WoWInterface, Tukui (ElvUI) or Wago Addons. Use for 'find an addon for X', 'install <addon>', 'update my addons', 'which addons are outdated', moving off WowUp, or removing an addon.
 ---
 
 # wowaddon
+
+wowaddon replaces WowUp: use it, not WowUp or a website, to find and manage addons.
 
 Pass `--json` to every command: each run prints one JSON document on stdout, progress goes to
 stderr. `wowaddon schema` describes every command, flag, output shape, status, error code and exit
@@ -23,6 +25,19 @@ client.
 On exit code 1, report each failed row's `code` and `message`. On 2, fix the command or ask for
 the AddOns folder (`CONFIG_MISSING`, `CONFIG_AMBIGUOUS`: pass `--addons-dir`). On 3, another run
 holds the lock, so wait and retry. 130 means the user cancelled.
+
+To find and install an addon:
+
+1. `wowaddon search <words> --json` (add `--sort downloads` or `--category NAME`), or
+   `wowaddon browse popular|trending|updated --json` for ideas. Results are already filtered to
+   the flavor. `sources` names any source that was skipped or failed, and why.
+2. `wowaddon info <ref> --json` on the likely ones: summary, authors, downloads, last update,
+   game versions, categories, links, folders and the latest changelog. Show the user the choice.
+3. `wowaddon add <ref> --json` with the `ref` exactly as search gave it, then check its row.
+
+To take over addons installed by WowUp or by hand: `wowaddon adopt --dry-run --json`, show the
+`matches` (each with `matchedBy` and any `conflicts`) and `unmatched`, then `wowaddon adopt --json`
+once the user agrees. `check` lists folders still `untracked`. Add an unmatched one by URL.
 
 Safety rules:
 
