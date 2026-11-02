@@ -11,12 +11,12 @@ websites as far as each source's API allows, and `adopt` takes over what WowUp i
 bun install --frozen-lockfile
 bun run start      # run the app (TUI when stdin and stdout are a terminal)
 bun run check      # typecheck + lint + test
-bun run gate       # check + changelog + sift: what CI runs
+bun run gate       # check + changelog + project rules: what CI runs
 bun run build      # standalone binaries in dist/
 bun run typecheck
 bun run lint
 bun test
-python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
+python3 .sloppatrol/gate.py --base origin/main && python3 .sloppatrol/agents.py check
 ```
 
 CI runs the same gate, builds and smoke-tests the x64 and arm64 binaries, and runs actionlint, zizmor and gitleaks.
@@ -64,5 +64,5 @@ merged `main` commit and push the tag; `.github/workflows/release.yml` publishes
 - The TUI's views share one frame with fixed heights, so switching views never moves a line;
   `App.test.tsx` checks it. Keep that when adding a view or a pane.
 - Commits are signed (`git commit -S`) with the personal email.
-- Quality: load `.agents/skills/sift-project/SKILL.md` before cleanup, dead-code or refactoring
+- Quality: load `.agents/skills/sloppatrol-project/SKILL.md` before cleanup, dead-code or refactoring
   work.

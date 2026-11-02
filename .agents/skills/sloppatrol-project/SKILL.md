@@ -1,12 +1,12 @@
 ---
 
-name: sift-project
-description: "Project skill for sift in wowaddon: the exact quality-gate and evidence commands, live roots that must never be deleted as dead code, exclusions, conventions and risk order. Load before running sift or any code-quality, cleanup or dead-code work in this repository."
+name: sloppatrol-project
+description: "Project skill for Sloppatrol in wowaddon: the exact quality-gate and evidence commands, live roots that must never be deleted as dead code, exclusions, conventions and risk order. Load before running Sloppatrol or any code-quality, cleanup or dead-code work in this repository."
 ---
 
-# sift project skill: wowaddon
+# Sloppatrol project skill: wowaddon
 
-<!-- Written by `sift setup`. Keep it factual: every command here has been run and works.
+<!-- Written by `sloppatrol setup`. Keep it factual: every command here has been run and works.
      Update it whenever an audit learns something (a live root, a false-positive source). -->
 
 wowaddon is a Bun + TypeScript (strict) CLI and OpenTUI React terminal UI that installs and updates
@@ -21,11 +21,11 @@ Run in order from the repository root. All must pass (exit 0) before and after a
 ```sh
 bun install --frozen-lockfile
 bun run check                               # tsc --noEmit, biome check ., bun test (208 tests, offline)
-python3 .sift/gate.py --base origin/main    # project rules
-python3 .sift/agents.py check
+python3 .sloppatrol/gate.py --base origin/main    # project rules
+python3 .sloppatrol/agents.py check
 ```
 
-ast-grep pin: not needed while `.sift/rules/` is empty.
+ast-grep pin: not needed while `.sloppatrol/rules/` is empty.
 
 ## Evidence
 
@@ -65,15 +65,15 @@ None.
 
 ## Zones
 
-| Path                                                       | Zone    | Reason                                                 |
-| ---------------------------------------------------------- | ------- | ------------------------------------------------------ |
-| `src/**/*.test.ts`, `src/**/*.test.tsx`                    | test    | colocated `bun test` specs                             |
-| `src/testing/helpers.ts`                                   | test    | offline `fetch` stubs and zip builders shared by tests |
-| `src/testing/fixtures/`                                    | fixture | recorded public API responses; never edited by cleanup |
-| `bin/`                                                     | script  | launcher                                               |
-| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig` | config  |                                                        |
-| `README.md`, `CHANGELOG.md`, `addons.example.txt`          | docs    |                                                        |
-| `.sift/gate.py`, `.sift/agents.py`, `.sift/LICENSE`        | vendor  | copied byte for byte from sift                         |
+| Path                                                                  | Zone    | Reason                                                 |
+| --------------------------------------------------------------------- | ------- | ------------------------------------------------------ |
+| `src/**/*.test.ts`, `src/**/*.test.tsx`                               | test    | colocated `bun test` specs                             |
+| `src/testing/helpers.ts`                                              | test    | offline `fetch` stubs and zip builders shared by tests |
+| `src/testing/fixtures/`                                               | fixture | recorded public API responses; never edited by cleanup |
+| `bin/`                                                                | script  | launcher                                               |
+| `.github/`, `biome.json`, `tsconfig.json`, `.editorconfig`            | config  |                                                        |
+| `README.md`, `CHANGELOG.md`, `addons.example.txt`                     | docs    |                                                        |
+| `.sloppatrol/gate.py`, `.sloppatrol/agents.py`, `.sloppatrol/LICENSE` | vendor  | copied byte for byte from Sloppatrol                   |
 
 ## Conventions
 
@@ -107,6 +107,6 @@ None.
 
 - Rules already owned elsewhere: `tsc --noEmit` (strict), Biome `recommended` preset, offline tests
   (`offline()` in `src/testing/helpers.ts` fails any unexpected fetch).
-- ast-grep rules: `.sift/rules/` (0): none yet.
-- Script rules: `.sift/scripts/` (0): none yet.
-- Lenses: `.sift/lenses/`: none yet.
+- ast-grep rules: `.sloppatrol/rules/` (0): none yet.
+- Script rules: `.sloppatrol/scripts/` (0): none yet.
+- Lenses: `.sloppatrol/lenses/`: none yet.
