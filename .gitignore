@@ -3,7 +3,7 @@ dist/
 .env
 .env.local
 .DS_Store
-.sift/runs/
+.sloppatrol/runs/
 .claude/worktrees/
 
 # Patrol runs: local data

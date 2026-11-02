@@ -53,8 +53,8 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
       - run: ./gitleaks git --redact --no-banner .
 
-  sift:
-    name: sift
+  project-rules:
+    name: Project rules
     runs-on: ubuntu-latest
     permissions: { contents: read }
     steps:
@@ -64,5 +64,5 @@ jobs:
           persist-credentials: false
       - env:
           BASE: ${{ github.base_ref || github.event.repository.default_branch }}
-        run: python3 .sift/gate.py --base "origin/$BASE"
-      - run: python3 .sift/agents.py check
+        run: python3 .sloppatrol/gate.py --base "origin/$BASE"
+      - run: python3 .sloppatrol/agents.py check
