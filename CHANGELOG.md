@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The TUI uses the terminal's palette throughout: each source tag has its own colour, statuses are
+  coloured by meaning, versions and dates are dimmed, and the keys line shows each key in the accent
+  colour.
+- The keys line fits on one line from about 100 columns; paging and other less used keys are in `?`
+  help, which now also works in the browse view. On a narrow terminal `q quit` wraps together with
+  `? help`, never alone.
+- The installed view's pane under the list shows the selected addon's status, version, latest
+  version, install date and folders, instead of one line followed by empty rows.
+
 ### Fixed
 
 - `info` and search results list game versions in numeric order, so 2.5.5 comes before 10.0.0.

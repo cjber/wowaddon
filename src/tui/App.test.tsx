@@ -75,8 +75,12 @@ afterEach(async () => {
   setup = undefined;
   for (const spy of [open, list, add, sync, remove, find, info]) spy.mockRestore();
 });
-async function start(props: { flavor?: Flavor; addonsDir?: string } = {}) {
-  setup = await testRender(<App {...props} onQuit={quit} />, { width: 100, height: 24 });
+async function start(
+  props: { flavor?: Flavor; addonsDir?: string } = {},
+  width = 100,
+  height = 24,
+) {
+  setup = await testRender(<App {...props} onQuit={quit} />, { width, height });
   await frame();
   return setup;
 }
@@ -259,13 +263,13 @@ test("40 addons fit in 100x24 with clipping indicators, footer and selected row 
   await start();
   let output = await frame();
   expect(output).toMatch(/↓ \d+ more/);
-  expect(output).toContain("u update · U all");
+  expect(output).toContain("u update  U all");
   for (let i = 0; i < 39; i++) await press("ARROW_DOWN");
   output = await frame();
   expect(output).toContain("› Addon39");
   expect(output).toContain("gh:a/addon39");
   expect(output).toMatch(/↑ \d+ more/);
-  expect(output).toContain("u update · U all");
+  expect(output).toContain("u update  U all");
   const marker = setup
     ?.captureSpans()
     .lines.flatMap((line) => line.spans)
@@ -276,7 +280,7 @@ test("40 addons fit in 100x24 with clipping indicators, footer and selected row 
   });
   output = await frame();
   expect(output).toContain("› Addon39");
-  expect(output).toContain("u update · U all");
+  expect(output).toContain("u update  U all");
 });
 
 test("Ctrl+C also aborts an active removal", async () => {
@@ -351,16 +355,79 @@ test("switching views keeps the page height and each view's scroll position", as
   await start();
   for (let i = 0; i < 25; i++) await press("j");
   const installed = await frame();
-  const keysRow = lineOf(installed, "j/k move");
+  const keysRow = lineOf(installed, "q quit");
   const statusRow = keysRow - 1;
   await press("TAB");
   await press("END");
   const browse = await frame();
-  expect(lineOf(browse, "j/k move")).toBe(keysRow);
+  expect(lineOf(browse, "q quit")).toBe(keysRow);
   expect(browse.split("\n").length).toBe(installed.split("\n").length);
   await press("TAB");
   expect(await frame()).toBe(installed);
   expect(lineOf(installed, "› Addon25")).toBeLessThan(statusRow);
   await press("TAB");
   expect(await frame()).toBe(browse);
+});
+
+const keysOf = (output: string) =>
+  output
+    .split("\n")
+    .filter(
+      (line) => line.includes("quit") || line.includes("u update") || line.includes("/ search"),
+    );
+
+for (const width of [110, 80] as const) {
+  test(`at ${width} columns the keys line ${width === 110 ? "is one line" : "wraps with quit beside help"} in both views`, async () => {
+    list.mockResolvedValue([row("Foo", "current")]);
+    await start({}, width, 24);
+    const installed = await frame();
+    await press("TAB");
+    const browse = await frame();
+    for (const [output, first] of [
+      [installed, "u update"],
+      [browse, "/ search"],
+    ] as const) {
+      const quitLine = output.split("\n")[lineOf(output, "q quit")];
+      expect(quitLine).toContain("? help  q quit");
+      if (width === 110) expect(quitLine).toContain(first);
+      else expect(quitLine).not.toContain(first);
+      // The footer is the same height in both views, so the keys start on the same row.
+      expect(lineOf(output, first)).toBe(lineOf(installed, "u update"));
+    }
+    expect(keysOf(installed).length).toBe(width === 110 ? 1 : 2);
+  });
+}
+
+test("the installed pane lists the selected addon's facts in palette colours", async () => {
+  list.mockResolvedValue([
+    {
+      ...row("Foo", "update"),
+      installed: {
+        version: "1.0",
+        versionKey: "1",
+        folders: ["Foo", "Foo_Options"],
+        installedAt: "2026-10-20T09:00:00Z",
+      },
+      latest: {
+        version: "1.1",
+        versionKey: "2",
+        url: "https://example.com",
+        archive: "package",
+        note: "beta",
+      },
+    },
+  ]);
+  await start({}, 110, 24);
+  const output = await frame();
+  expect(output).toContain("Foo  gh:a/foo");
+  expect(output).toMatch(/status +update available/);
+  expect(output).toMatch(/version +1\.0/);
+  expect(output).toMatch(/latest +1\.1 beta/);
+  expect(output).toMatch(/installed +2026-10-20/);
+  expect(output).toMatch(/folders +Foo, Foo_Options/);
+  const spans = setup?.captureSpans().lines.flatMap((line) => line.spans) ?? [];
+  const span = (text: string) => spans.find((s) => s.text.trim() === text);
+  expect(span("gh")?.fg).not.toEqual(span("update available")?.fg);
+  expect(span("q")?.fg).toEqual(span("u")?.fg);
+  expect((span("quit")?.attributes ?? 0) & TextAttributes.DIM).toBe(TextAttributes.DIM);
 });

@@ -201,21 +201,16 @@ const STATUS_WORDS: Record<Row["status"], string> = {
   error: "failed",
 };
 
-function statusLabel(row: Row): string {
+export function statusLabel(row: Row): string {
   return STATUS_WORDS[row.status];
 }
 
 // Pads each column to its widest cell so rows line up as a table; long names are cut with "…".
-export function tableRows(columns: RowColumns[], keys: (keyof RowColumns)[]): string[] {
+export function tableRows(columns: RowColumns[], keys: (keyof RowColumns)[]): string[][] {
   const cell = (value: string, key: keyof RowColumns) =>
     key === "name" && value.length > NAME_MAX ? `${value.slice(0, NAME_MAX - 1)}…` : value;
   const widths = keys.map((key) => Math.max(0, ...columns.map((c) => cell(c[key], key).length)));
-  return columns.map((c) =>
-    keys
-      .map((key, i) => cell(c[key], key).padEnd(widths[i]))
-      .join("  ")
-      .trimEnd(),
-  );
+  return columns.map((c) => keys.map((key, i) => cell(c[key], key).padEnd(widths[i])));
 }
 
 const NAME_MAX = 28;
@@ -224,11 +219,9 @@ export function shortenPath(path: string, home: string): string {
   return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }
 
-// Only the keys that work in the view on screen; the longest set sizes the keys line for both.
+// Only the keys that work in the view on screen; paging, folding by arrow and the rest are in `?` help.
 export const KEYS: Record<View, string[]> = {
   installed: [
-    "j/k move",
-    "pgup/pgdn page",
     "u update",
     "U all",
     "a add",
@@ -240,26 +233,32 @@ export const KEYS: Record<View, string[]> = {
     "q quit",
   ],
   browse: [
-    "j/k move",
-    "pgup/pgdn page",
-    "h/l fold",
     "/ search",
     "o sort",
-    "enter details",
+    "enter info",
     "i install",
-    "n/p results page",
+    "h/l fold",
+    "n/p page",
     "tab installed",
+    "? help",
     "q quit",
   ],
 };
-// The keys line wraps between bindings, so count the rows the way the wrap fills them.
+export const KEY_GAP = "  ";
+// The units the keys line wraps between: one per binding, except help and quit stay together so
+// quit never sits alone on a line.
+export function keyUnits(view: View): string[][] {
+  const keys = KEYS[view];
+  return [...keys.slice(0, -2).map((key) => [key]), keys.slice(-2)];
+}
+// Count the rows the wrap fills; the longest set sizes the keys line for both views.
 export function keyLines(width: number): number {
   const room = Math.max(width - 2, 1);
-  const rows = (keys: string[]) => {
+  const rows = (units: string[][]) => {
     let count = 1;
     let used = 0;
-    keys.forEach((key, index) => {
-      const cell = key.length + (index < keys.length - 1 ? 3 : 0);
+    units.forEach((unit, index) => {
+      const cell = unit.join(KEY_GAP).length + (index < units.length - 1 ? KEY_GAP.length : 0);
       if (used && used + cell > room) {
         count++;
         used = 0;
@@ -268,7 +267,7 @@ export function keyLines(width: number): number {
     });
     return count;
   };
-  return Math.max(...Object.values(KEYS).map(rows));
+  return Math.max(...(Object.keys(KEYS) as View[]).map((view) => rows(keyUnits(view))));
 }
 
 export const NARROW_WIDTH_COLUMNS = 80;

@@ -12,15 +12,7 @@ import {
   type Listing,
   WowaddonError,
 } from "../types";
-import {
-  flavorList,
-  matchCategory,
-  type Query,
-  relevance,
-  unique,
-  versionSort,
-  words,
-} from "./query";
+import { flavorList, matchCategory, type Query, relevance, versionSort, words } from "./query";
 
 // WoWInterface's API has no search: it serves its whole file list (about 6 MB) and per-file
 // details, so search, sort and category filters run locally over a cached copy. Its compatibility

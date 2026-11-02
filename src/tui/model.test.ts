@@ -224,7 +224,7 @@ describe("tableRows", () => {
         },
       ],
       ["name", "source", "installed", "latest", "status"],
-    );
+    ).map((cells) => cells.join("  "));
     expect(lines[0].indexOf("cf")).toBe(lines[1].indexOf("gh"));
     expect(lines[1]).toContain(`${"A".repeat(27)}…`);
   });
