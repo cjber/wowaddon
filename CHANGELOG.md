@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-02
+
+### Fixed
+
+- `check` reports a missing addon as `unmanaged`, or `dev` for a symlink or checkout, whenever
+  `sync` would, instead of `missing`. It matches untracked folders by the project ID in their TOC
+  (`X-Curse-Project-ID`, `X-WoWI-ID`, `X-Wago-ID`) and by the folder list the source publishes, and
+  downloads a release only for a same-named folder neither settles. The schema and README say what
+  `check` can and cannot see.
+- `add` is all or nothing: the manifest gains the addon only when it installs (or with
+  `--no-install`), so an add that fails on a network error, a missing build, a bad ref or a broken
+  archive can be rerun instead of failing with `DUPLICATE`.
+- `bun run build` builds the binary for this machine instead of failing on the other
+  architecture's missing native package; `bun run build all` builds both after
+  `bun install --os linux --cpu "*"`. The gate now runs the host build.
+
 ## [2.1.2] - 2026-11-02
 
 ### Fixed

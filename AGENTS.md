@@ -11,15 +11,16 @@ websites as far as each source's API allows, and `adopt` takes over what WowUp i
 bun install --frozen-lockfile
 bun run start      # run the app (TUI when stdin and stdout are a terminal)
 bun run check      # typecheck + lint + test
-bun run gate       # check + changelog + project rules: what CI runs
-bun run build      # standalone binaries in dist/
+bun run gate       # check + host build + changelog + project rules: what CI runs
+bun run build      # standalone binary for this machine in dist/; `all` builds x64 and arm64
 bun run typecheck
 bun run lint
 bun test
 python3 .sloppatrol/gate.py --base origin/main && python3 .sloppatrol/agents.py check
 ```
 
-CI runs the same gate, builds and smoke-tests the x64 and arm64 binaries, and runs actionlint, zizmor and gitleaks.
+CI runs the same gate, builds and smoke-tests the x64 and arm64 binaries (each natively on its own runner;
+a local cross build first needs `bun install --os linux --cpu "*"` for the other OpenTUI native package), and runs actionlint, zizmor and gitleaks.
 Releases: `bun scripts/release.ts patch|minor|major` on a branch, merge, then `bun scripts/release.ts tag` on the
 merged `main` commit and push the tag; `.github/workflows/release.yml` publishes the GitHub release with binaries and the CHANGELOG entry.
 

@@ -35,7 +35,7 @@ wowaddon info <ref|url>                # summary, authors, downloads, versions, 
 wowaddon categories                    # category names that --category takes
 wowaddon adopt [--dry-run] [--wowup PATH] [--no-wowup] [--no-backup]
 wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]
-wowaddon check [<id|ref>...]           # what sync would install or update
+wowaddon check [<id|ref>...]           # what sync would do, mostly without downloading
 wowaddon add <ref|url> [--note TEXT] [--no-install] [--adopt] [--dry-run]
 wowaddon add <kind> <ref> [--note TEXT] [--no-install] [--adopt] [--dry-run]
 wowaddon remove <id|ref> [--dry-run]
@@ -52,8 +52,17 @@ Output is plain lines to stdout, progress to stderr: `OK cf:6124 Auctionator 11.
 `SKIP gh:a/b dev link, skipped: ...`, `FAIL gh:a/b <message>`. `--dry-run` on `add` and `sync`
 downloads each release it would install and checks its folders, so it reports the status a real
 run would give, such as `unmanaged`, but leaves the manifest, state and AddOns folder as they are.
-An `add` stopped by an `unmanaged` folder leaves the manifest alone too, so rerunning it with
-`--adopt` takes the folder over.
+`add` is all or nothing: the manifest gains the addon only when it installs (or with
+`--no-install`), so an add that fails or is stopped by an `unmanaged` folder can be rerun as is or
+with `--adopt`.
+
+`check` judges from release info and local folders and downloads only as a last resort. A missing
+addon shows as `unmanaged` (or `dev`) when an untracked folder's TOC carries its project ID
+(`X-Curse-Project-ID`, `X-WoWI-ID`, `X-Wago-ID`) or the source lists that folder for it (CurseForge
+modules, WoWInterface, Tukui and WowUp Hub folder lists, the ones `info` shows). A same-named folder
+that neither settles is checked by downloading the release, as `sync --dry-run` does. It cannot see
+an untracked folder named unlike the addon that the source does not list, nor a new folder that an
+update to an installed addon adds; `sync --dry-run` finds both.
 
 | Exit code | Meaning                                                 |
 | --------- | ------------------------------------------------------- |

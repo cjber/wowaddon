@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
+import { CURSE_TOOLS } from "./discover/curseforge";
 import { setFetch } from "./http";
 import { manifestPath } from "./manifest";
 import { addAddon, listRows, removeAddon, syncAddons } from "./service";
 import { readState, writeState } from "./state";
+import questieMod from "./testing/fixtures/ct-mod-questie.json";
 import { json, offline, routeFetch, tempContext, zip } from "./testing/helpers";
 import type { Progress } from "./types";
 
@@ -111,6 +113,108 @@ test("an add stopped by an unmanaged folder leaves the manifest alone, so --adop
   );
   expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
 });
+const questieFiles =
+  "https://www.curseforge.com/api/v1/mods/334372/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true";
+const questieRoutes = {
+  [questieFiles]: {
+    data: [
+      {
+        id: 9,
+        projectId: 334372,
+        fileName: "Questie.zip",
+        gameVersionTypeIds: [67408],
+        gameVersions: ["1.15.8"],
+        releaseType: 1,
+      },
+    ],
+    pagination: { totalCount: 1 },
+  },
+};
+async function checkStatus() {
+  return (await listRows(fixture.ctx, { refresh: true })).map((row) => row.status);
+}
+const questieInfo = {
+  [`${CURSE_TOOLS}/mods/334372`]: questieMod,
+  [`${CURSE_TOOLS}/mods/334372/description`]: { data: "" },
+};
+test("check judges a missing addon from the cheapest evidence that settles it", async () => {
+  fixture.ctx.flavor = "era";
+  await writeFile(manifestPath(fixture.ctx), "cf 334372\n");
+  const routes = routeFetch({ ...questieRoutes, ...questieInfo });
+  setFetch(routes.fetch);
+  // No untracked folder at all: missing, from the release alone.
+  expect(await checkStatus()).toEqual(["missing"]);
+  expect(routes.calls).toEqual([questieFiles]);
+  // An untracked folder the source does not list: missing, from its folder list.
+  await mkdir(join(fixture.ctx.addonsDir, "Other"));
+  routes.calls.length = 0;
+  expect(await checkStatus()).toEqual(["missing"]);
+  expect(routes.calls.some((url) => url.includes("/download"))).toBe(false);
+  // A folder whose TOC carries the project ID: unmanaged, with no lookup beyond the release.
+  await mkdir(join(fixture.ctx.addonsDir, "QuestieOld"));
+  await writeFile(
+    join(fixture.ctx.addonsDir, "QuestieOld/QuestieOld.toc"),
+    "## X-Curse-Project-ID: 334372\n",
+  );
+  routes.calls.length = 0;
+  const [row] = await listRows(fixture.ctx, { refresh: true });
+  expect(row).toMatchObject({ status: "unmanaged", code: "UNMANAGED" });
+  expect(routes.calls).toEqual([questieFiles]);
+});
+test("check matches an untracked folder by the source's folder list, and a symlink is dev", async () => {
+  fixture.ctx.flavor = "era";
+  await writeFile(manifestPath(fixture.ctx), "cf 334372\n");
+  const routes = routeFetch({ ...questieRoutes, ...questieInfo });
+  setFetch(routes.fetch);
+  await mkdir(join(fixture.ctx.addonsDir, "Questie"));
+  expect(await checkStatus()).toEqual(["unmanaged"]);
+  expect(routes.calls.some((url) => url.includes("/download"))).toBe(false);
+  await rm(join(fixture.ctx.addonsDir, "Questie"), { recursive: true });
+  await mkdir(join(fixture.root, "dev/Questie"), { recursive: true });
+  await symlink(join(fixture.root, "dev/Questie"), join(fixture.ctx.addonsDir, "Questie"));
+  expect(await checkStatus()).toEqual(["dev"]);
+});
+test("check downloads only when a folder named like the addon is otherwise undecided", async () => {
+  await writeFile(manifestPath(fixture.ctx), "gh a/b  # Foo\n");
+  await mkdir(join(fixture.ctx.addonsDir, "Foo"));
+  const calls = await installRoutes();
+  // installRoutes has no repository route, so the source lists no folders and the download decides.
+  expect(await checkStatus()).toEqual(["unmanaged"]);
+  expect(calls).toContain("https://github.com/a/b/asset.zip");
+  expect((await syncAddons(fixture.ctx, { dryRun: true })).rows[0].status).toBe("unmanaged");
+  expect(await readdir(join(fixture.ctx.addonsDir, "Foo"))).toEqual([]);
+});
+test("a failed add leaves the manifest as it was, so a rerun is not a duplicate", async () => {
+  let online = false;
+  const bytes = await zip({ "Foo/Foo.toc": "## Interface: 16001" });
+  setFetch(async (url) => {
+    if (!online) throw new TypeError("network down");
+    if (url === "https://api.github.com/repos/a/b/releases?per_page=100&page=1")
+      return json([
+        {
+          tag_name: "v1",
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              id: 1,
+              updated_at: "now",
+              name: "Foo-forever.zip",
+              browser_download_url: "https://github.com/a/b/asset.zip",
+            },
+          ],
+        },
+      ]);
+    if (url === "https://github.com/a/b/asset.zip") return new Response(bytes);
+    throw new Error(`Unexpected network request: ${url}`);
+  });
+  expect((await addAddon(fixture.ctx, "a/b", { install: true })).status).toBe("error");
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+  online = true;
+  expect((await addAddon(fixture.ctx, "a/b", { install: true })).status).toBe("current");
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+});
 test("a sync dry run predicts an unmanaged folder like the real sync", async () => {
   await writeFile(manifestPath(fixture.ctx), "gh a/b\n");
   await mkdir(join(fixture.ctx.addonsDir, "Foo"));
@@ -170,7 +274,7 @@ test("legacy CF local reads report uncached slugs on their row without network",
   expect((await listRows(fixture.ctx, { refresh: false }))[0].entry.id).toBe("cf:6124");
 });
 
-test("CF install writes the resolved title and reports a missing build without losing the entry", async () => {
+test("a CF add with no build for the flavor fails and leaves the manifest alone", async () => {
   setFetch(
     routeFetch({
       "https://api.cfwidget.com/wow/addons/auctionator": { id: 6124, title: "Auctionator" },
@@ -193,7 +297,7 @@ test("CF install writes the resolved title and reports a missing build without l
   const row = await addAddon(fixture.ctx, "auctionator", { install: true });
   expect(row.status).toBe("error");
   expect(row.message).toBe("No Forever build on CurseForge (latest is Classic Era)");
-  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 6124  # Auctionator\n");
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
 });
 test("WoWI archive TOCs enforce the selected flavor", async () => {
   const bytes = await zip({ "Foo/Foo.toc": "## Interface: 11508" });

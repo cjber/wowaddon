@@ -73,13 +73,15 @@ const specs: Record<string, CommandSpec> = {
   },
   check: {
     args: "[<id|ref>...]",
-    summary: "report which addons sync would install or update; installs nothing",
+    summary:
+      "report what sync would do; installs nothing. A missing addon is unmanaged (or dev) when an untracked folder's TOC carries its project ID or the source lists that folder for it; only a same-named folder neither settles is downloaded to check. A folder named unlike the addon that the source does not list is missed, and an update is judged from the release alone",
     flags: {},
     output: "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[] }",
   },
   add: {
     args: "<ref|url> | <kind> <ref>",
-    summary: "add an addon to the manifest and install it",
+    summary:
+      "install an addon and add it to the manifest; a failed add leaves the manifest as it was",
     flags: {
       note: { help: "manifest comment for the addon", value: "TEXT" },
       "no-install": { help: "only write the manifest line" },
