@@ -37,6 +37,11 @@ export function matchCategory(categories: Category[], name: string): Category | 
   return partial.length === 1 ? partial[0] : undefined;
 }
 
+// Game versions in numeric order, so 2.5.5 comes before 10.0.0.
+export function versionSort(versions: string[]): string[] {
+  return unique(versions).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+}
+
 export function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }

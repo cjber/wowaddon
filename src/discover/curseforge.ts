@@ -10,7 +10,7 @@ import {
   type Listing,
   WowaddonError,
 } from "../types";
-import { flavorList, matchCategory, type Order, type Query, unique } from "./query";
+import { flavorList, matchCategory, type Order, type Query, unique, versionSort } from "./query";
 
 // CurseForge's own site refuses keyless search (www.curseforge.com/api/v1/mods/search answers 403),
 // so search, browse and project details use the official v1 API shape: api.curseforge.com with the
@@ -94,7 +94,7 @@ export function cfListing(mod: CfMod): Listing {
     downloads: mod.downloadCount ?? null,
     updated: mod.dateReleased ?? mod.dateModified ?? null,
     categories: (mod.categories ?? []).map((category) => category.name),
-    gameVersions: unique((mod.latestFilesIndexes ?? []).map((index) => index.gameVersion)).sort(),
+    gameVersions: versionSort((mod.latestFilesIndexes ?? []).map((index) => index.gameVersion)),
     flavors: cfFlavors(mod),
     url: mod.links?.websiteUrl ?? `https://www.curseforge.com/wow/addons/${mod.slug}`,
   };

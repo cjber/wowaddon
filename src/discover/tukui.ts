@@ -2,7 +2,7 @@ import { flavors } from "../flavors";
 import { requestJson, requestText } from "../http";
 import { firstLines, markdownToText } from "../text";
 import { type AddonInfo, type Context, type Listing, WowaddonError } from "../types";
-import { flavorList, type Query, relevance, words } from "./query";
+import { flavorList, type Query, relevance, versionSort, words } from "./query";
 
 // Tukui lists two addons, ElvUI and Tukui, with no download counts or categories. One ZIP serves
 // every client, and its Classic patch tag covers both Classic Era and WoW: Forever.
@@ -35,7 +35,7 @@ function tukuiListing(addon: TukuiAddon): Listing {
     downloads: null,
     updated: addon.last_update ?? null,
     categories: [],
-    gameVersions: [...patches].sort(),
+    gameVersions: versionSort([...patches]),
     flavors: flavorList((flavor) =>
       patches.some((patch) => classic.test(patch) || flavors[flavor].version.test(patch)),
     ),
