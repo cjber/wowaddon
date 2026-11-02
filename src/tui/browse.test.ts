@@ -71,6 +71,7 @@ test("the window follows the cursor alone and the keys line fits the longest key
   expect(windowStart(25, 40, 12)).toBe(14);
   expect(windowStart(39, 40, 12)).toBe(28);
   expect(keyLines(200)).toBe(1);
-  expect(keyLines(100)).toBe(2);
+  expect(keyLines(100)).toBe(1);
+  expect(keyLines(80)).toBe(2);
   expect(keyLines(40)).toBeGreaterThan(2);
 });

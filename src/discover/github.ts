@@ -1,7 +1,7 @@
 import { getCredentials, requestJson } from "../http";
 import { firstLines, htmlToText, markdownToText } from "../text";
 import { type AddonInfo, type Context, type Flavor, type Listing, WowaddonError } from "../types";
-import { flavorList, type Query, relevance, unique, versionSort } from "./query";
+import { flavorList, type Query, relevance, versionSort } from "./query";
 
 // GitHub addons are found through WowUp Hub (hub.wowup.io), WowUp's own index of GitHub repos that
 // publish packaged releases with a release.json. It searches by name, lists featured and recently

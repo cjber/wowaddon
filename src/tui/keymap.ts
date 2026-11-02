@@ -128,6 +128,7 @@ function browseKey(key: KeyEvent, state: TuiState, update: UpdateState, actions:
     void actions.search(next);
   };
   if (key.sequence === "/") update((s) => updateBrowse(s, startSearch));
+  else if (key.sequence === "?") update(toggleHelp);
   else if (key.name === "h" || key.name === "left")
     update((s) => updateBrowse(s, (b) => setFold(b, true)));
   else if (key.name === "l" || key.name === "right")
