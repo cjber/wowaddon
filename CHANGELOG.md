@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
 ## [1.0.0] - 2026-11-02
 
 ### Added
@@ -17,3 +19,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `addons.txt` to `era.txt`.
 - Dev-link protection: symlinked, git-tracked or in-worktree addon folders are skipped
   rather than overwritten, and removing one stops tracking it while its folder stays as it is.
+- Standalone Linux binaries (x64 and arm64) attached to each GitHub release.

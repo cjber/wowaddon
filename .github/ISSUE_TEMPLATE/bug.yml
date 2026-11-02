@@ -1,0 +1,24 @@
+name: Bug
+description: wowaddon did the wrong thing
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The `OK`, `SKIP` or `FAIL` lines, or `wowaddon list --json` for the addon involved.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `wowaddon --version`, and the flavor (era or forever).
+    validations:
+      required: true

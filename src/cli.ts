@@ -1,7 +1,8 @@
+import packageJson from "../package.json";
 import { addAddon, listRows, openContext, removeAddon, syncAddons } from "./service";
 import type { Context, Flavor, Progress, Row } from "./types";
 
-const VERSION = "1.0.0";
+const VERSION = packageJson.version;
 
 const HELP = `wowaddon — manage WoW addons from GitHub, CurseForge and WoWInterface
 
