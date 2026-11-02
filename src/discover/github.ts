@@ -1,7 +1,7 @@
 import { getCredentials, requestJson } from "../http";
 import { firstLines, htmlToText, markdownToText } from "../text";
 import { type AddonInfo, type Context, type Flavor, type Listing, WowaddonError } from "../types";
-import { flavorList, type Query, relevance, unique } from "./query";
+import { flavorList, type Query, relevance, unique, versionSort } from "./query";
 
 // GitHub addons are found through WowUp Hub (hub.wowup.io), WowUp's own index of GitHub repos that
 // publish packaged releases with a release.json. It searches by name, lists featured and recently
@@ -57,11 +57,11 @@ export function hubListing(addon: HubAddon): Listing | undefined {
     downloads: addon.total_download_count ?? null,
     updated: release?.published_at ?? null,
     categories: [],
-    gameVersions: unique(
+    gameVersions: versionSort(
       versions.flatMap((version) =>
         Number(version.interface) > 0 ? [version.interface ?? ""] : [],
       ),
-    ).sort(),
+    ),
     flavors: hubFlavors(addon),
     url: addon.repository,
   };

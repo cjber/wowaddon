@@ -20,7 +20,7 @@ import { json, offline, routeFetch, tempContext } from "../testing/helpers";
 import { addonInfo, categories, discover } from ".";
 import { CURSE_TOOLS } from "./curseforge";
 import { HUB } from "./github";
-import { matchCategory, type Query } from "./query";
+import { matchCategory, type Query, versionSort } from "./query";
 
 let fixture: Awaited<ReturnType<typeof tempContext>>;
 beforeEach(async () => {
@@ -181,6 +181,15 @@ test("category names match exactly or as the one name containing the text", () =
   expect(matchCategory(list, "map minimap")?.id).toBe("1");
   expect(matchCategory(list, "bags")?.id).toBe("3");
   expect(matchCategory(list, "mi")).toBeUndefined();
+});
+
+test("game versions sort numerically, not as text", () => {
+  expect(versionSort(["10.0.0", "2.5.5", "1.60.1", "1.15.7", "2.5.5"])).toEqual([
+    "1.15.7",
+    "1.60.1",
+    "2.5.5",
+    "10.0.0",
+  ]);
 });
 
 test("categories lists CurseForge and WoWInterface and says which sources have none", async () => {

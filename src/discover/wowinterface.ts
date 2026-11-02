@@ -12,7 +12,15 @@ import {
   type Listing,
   WowaddonError,
 } from "../types";
-import { flavorList, matchCategory, type Query, relevance, unique, words } from "./query";
+import {
+  flavorList,
+  matchCategory,
+  type Query,
+  relevance,
+  unique,
+  versionSort,
+  words,
+} from "./query";
 
 // WoWInterface's API has no search: it serves its whole file list (about 6 MB) and per-file
 // details, so search, sort and category filters run locally over a cached copy. Its compatibility
@@ -117,7 +125,7 @@ export function wowiListing(file: WowiFile, categories: Map<string, string>): Li
     downloads: Number(file.UIDownloadTotal) || 0,
     updated: date(file.UIDate),
     categories: category ? [category] : [],
-    gameVersions: unique((file.UICompatibility ?? []).map((tag) => tag.version)).sort(),
+    gameVersions: versionSort((file.UICompatibility ?? []).map((tag) => tag.version)),
     flavors: wowiFlavors(file),
     url: file.UIFileInfoURL,
   };
