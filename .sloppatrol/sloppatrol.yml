@@ -1,0 +1,17 @@
+# Sloppatrol profile for wowaddon, a Bun and TypeScript CLI and TUI. The checks are the repo's own gate.
+agent: claude
+prepare:
+  - run: bun install --frozen-lockfile
+cleanup: []
+checks:
+  - { name: lint, run: "bun run lint" }
+  - { name: typecheck, run: "bun run typecheck" }
+  - { name: test, run: "bun test", tests: true }
+  - { name: changelog, run: "bun scripts/changelog.ts --check" }
+  - { name: gate, run: "python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check" }
+focus: [src/**, bin/**]
+ignore: [dist/**, node_modules/**, docs/**, skills/**]
+guards: { maxFiles: 10, maxLines: 500 }
+agents:
+  refactorer: { maxPerCycle: 1, maxAttempts: 2 }
+github: { enabled: false }

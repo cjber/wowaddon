@@ -1,0 +1,42 @@
+version: 1
+
+# Speedpatrol profile for wowaddon, a Bun CLI and TUI. The benchmarks are the repo's own gate: the test
+# suite, the type check and the linter, all of which a change to a hot path shows up in.
+project:
+  name: wowaddon
+  source: .
+app:
+  instructions: instructions.md
+  prepare:
+    - run: bun install --frozen-lockfile
+  setup: []
+  teardown: []
+defaults:
+  iterations: 7
+  warmup: 1
+  timeoutMs: 180000
+  rounds: 2
+benchmarks:
+  - id: gate.test
+    kind: command
+    critical: true
+    title: "The test suite, as CI runs it"
+    run: "bun test >/dev/null"
+    profile: { enabled: false }
+  - id: gate.typecheck
+    kind: command
+    critical: false
+    title: "The TypeScript build check"
+    run: "bun run typecheck"
+    profile: { enabled: false }
+  - id: gate.lint
+    kind: command
+    critical: false
+    title: "biome check, as CI runs it"
+    run: "bun run lint"
+    profile: { enabled: false }
+agents:
+  analyst: { use: claude, timeoutMinutes: 30 }
+  optimizer: { use: claude, enabled: true, maxPerCycle: 1, minImprovement: 0.05 }
+  github: { enabled: false }
+  patrol: { intervalMinutes: 30, pull: origin/main, cycles: 0 }
