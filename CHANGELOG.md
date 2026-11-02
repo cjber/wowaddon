@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `--json` on every command: one JSON document on stdout with a `schemaVersion`, the flavor and
+  AddOns folder, and typed error codes on failed rows and failed commands.
+- `wowaddon schema`, describing commands, flags, JSON output, statuses, error codes and exit codes.
+- `wowaddon check`, reporting which addons `sync` would install or update without installing.
+- `--dry-run` on `sync`, `add` and `remove`.
+- Exit code `3` when another wowaddon run holds the lock.
+- A WTF snapshot before `sync` changes anything, under `~/.local/state/wowaddon/backups/<flavor>/`,
+  keeping the newest `backupKeep` (default 5), with `--no-backup` to skip it.
+- Tukui (`tukui:elvui`, `tukui:tukui`) and Wago Addons (`wago:<slug>`, with `WAGO_ADDONS_API_KEY`)
+  as sources.
+- An agent skill at `skills/wowaddon/SKILL.md`.
+- `remove` and `sync` find a manifest entry by its bare ref, such as `elvui`.
+
+### Changed
+
+- `list --json` prints the JSON envelope with the rows under `addons`, not a bare array.
+
+### Fixed
+
+- A dev-linked folder named after a GitHub, Tukui or Wago addon that has no state record shows as
+  `dev`, not `missing`, and sync skips it.
+
 ## [1.0.0] - 2026-11-02
 
 ### Added

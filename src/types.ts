@@ -1,5 +1,5 @@
 export type Flavor = "era" | "forever";
-export type SourceKind = "gh" | "cf" | "wowi";
+export type SourceKind = "gh" | "cf" | "wowi" | "tukui" | "wago";
 export interface Entry {
   id: string;
   kind: SourceKind;
@@ -26,6 +26,7 @@ export interface Row {
   latest?: Release;
   status: Status;
   message?: string;
+  code?: string;
 }
 export type Phase = "resolving" | "downloading" | "installing" | "done" | "skipped" | "failed";
 export interface Progress {
@@ -46,5 +47,6 @@ export interface Context {
   flavor: Flavor;
   addonsDir: string;
   configDir: string;
+  backups: { dir: string; keep: number };
   notices: string[];
 }

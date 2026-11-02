@@ -68,7 +68,9 @@ export function validateState(data: unknown, ctx: Context): State {
   const folders = new Set<string>();
   for (const [id, installed] of Object.entries(state.addons)) {
     if (
-      !/^(?:gh:[a-z0-9-]+\/[a-z0-9_.-]+|cf:[1-9]\d*|wowi:[1-9]\d*)$/.test(id) ||
+      !/^(?:gh:[a-z0-9-]+\/[a-z0-9_.-]+|cf:[1-9]\d*|wowi:[1-9]\d*|(?:tukui|wago):[a-z0-9]+(?:[-_][a-z0-9]+)*)$/.test(
+        id,
+      ) ||
       !installed ||
       typeof installed.version !== "string" ||
       typeof installed.versionKey !== "string" ||

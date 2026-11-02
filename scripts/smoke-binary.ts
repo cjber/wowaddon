@@ -32,12 +32,13 @@ try {
   if (!wowaddon("--version").includes(packageJson.version))
     throw new Error("--version does not match package.json");
   if (!wowaddon("--help").includes("wowaddon sync")) throw new Error("--help failed");
+  if (!JSON.parse(wowaddon("schema")).commands?.check) throw new Error("schema has no check");
   for (const flavor of ["era", "forever"]) {
-    const rows = JSON.parse(wowaddon("--flavor", flavor, "--addons-dir", addons, "list", "--json"));
-    if (!Array.isArray(rows) || rows.length)
-      throw new Error(`list --json for ${flavor} is not an empty array`);
+    const list = JSON.parse(wowaddon("--flavor", flavor, "--addons-dir", addons, "list", "--json"));
+    if (list.flavor !== flavor || !Array.isArray(list.addons) || list.addons.length)
+      throw new Error(`list --json for ${flavor} has no empty addons array`);
   }
-  console.log("version, help and list --json for both flavors passed");
+  console.log("version, help, schema and list --json for both flavors passed");
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

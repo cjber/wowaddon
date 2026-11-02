@@ -110,14 +110,23 @@ const projectKeys: Partial<Record<Entry["kind"], string>> = {
   cf: "X-Curse-Project-ID",
   wowi: "X-WoWI-ID",
 };
-// A dev folder (symlink or checkout) whose TOC carries this addon's own project ID: found before
-// the first install, when state doesn't know the addon's folders yet.
+const folderKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+// The folder name a source's own ref implies: QuestieTrace for gh questie/questietrace.
+function impliedFolder(entry: Entry): string | undefined {
+  if (entry.kind === "gh") return folderKey(entry.ref.slice(entry.ref.indexOf("/") + 1));
+  if (entry.kind === "tukui" || entry.kind === "wago") return folderKey(entry.ref);
+  return undefined;
+}
+// A dev folder (symlink or checkout) named after this addon, or whose TOC carries its own project
+// ID: found before the first install, when state doesn't know the addon's folders yet.
 async function devFolderFor(ctx: Context, entry: Entry): Promise<string | undefined> {
   const key = projectKeys[entry.kind];
-  if (!key) return undefined;
-  const id = new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im");
+  const name = impliedFolder(entry);
+  const id = key && new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im");
   for (const item of await readdir(ctx.addonsDir, { withFileTypes: true })) {
     if (!safeFolder(item.name) || !(await protectedFolder(ctx, item.name))) continue;
+    if (folderKey(item.name) === name) return item.name;
+    if (!id) continue;
     const dir = join(ctx.addonsDir, item.name);
     const files = await readdir(dir).catch(() => []);
     for (const file of files)
@@ -331,6 +340,8 @@ export interface InstallOptions {
   adopt?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: Progress) => void;
+  // Runs after the download is read, just before the AddOns folder changes.
+  beforeChange?: () => Promise<void>;
   rename?: typeof rename;
 }
 async function preflight(
@@ -492,6 +503,7 @@ export async function installAddon(
     source: release.archive === "source",
     signal: opts.signal,
   });
+  await opts.beforeChange?.();
   progress("installing");
   const next: Installed = {
     version: release.version,
@@ -511,13 +523,15 @@ export async function removeInstalled(
   state: State,
   id: string,
   opts: InstallOptions = {},
-): Promise<void> {
-  if (!state.addons[id]) return;
-  if (await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts)) return;
+): Promise<boolean> {
+  if (!state.addons[id]) return false;
+  if (await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts))
+    return true;
   // A dev-protected folder is never touched: stop tracking it and leave the folder as it is.
   checkAbort(opts.signal);
   const next = structuredClone(state);
   delete next.addons[id];
   await writeState(ctx, next);
   state.addons = next.addons;
+  return false;
 }

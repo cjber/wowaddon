@@ -137,7 +137,7 @@ export class AddonActions {
 
   runSync(ids?: string[], adopt = false) {
     return this.mutate(async (ctx, opts) => {
-      const rows = await syncAddons(ctx, { ...opts, ids, adopt });
+      const { rows } = await syncAddons(ctx, { ...opts, ids, adopt });
       return (state) => setRows(setNotice(state, "sync complete"), mergeRows(state.rows, rows));
     });
   }

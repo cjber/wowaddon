@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { contextEnv, isMissing } from "./config";
 import { type Context, WowaddonError } from "./types";
 
+export const WAGO_API = "https://addons.wago.io";
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 let fetcher: Fetch = (url, init) => fetch(url, init);
 export function setFetch(value?: Fetch): void {
@@ -13,6 +14,7 @@ export function setFetch(value?: Fetch): void {
 export interface Credentials {
   github?: string;
   curseforge?: string;
+  wago?: string;
 }
 const credentials = new WeakMap<Context, Promise<Credentials>>();
 async function tokenFile(path: string): Promise<string | undefined> {
@@ -46,7 +48,9 @@ export function getCredentials(ctx: Context): Promise<Credentials> {
         env.CF_API_KEY?.trim() ||
         env.CURSEFORGE_API_KEY?.trim() ||
         (await tokenFile(join(ctx.configDir, "cf_token")));
-      return { github, curseforge };
+      const wago =
+        env.WAGO_ADDONS_API_KEY?.trim() || (await tokenFile(join(ctx.configDir, "wago_token")));
+      return { github, curseforge, wago };
     })();
     credentials.set(ctx, value);
   }
@@ -107,6 +111,8 @@ export async function requestBytes(value: string, opts: HttpOptions = {}): Promi
         headers.set("Authorization", `Bearer ${secrets.github}`);
       if (url.origin === "https://api.curseforge.com" && secrets.curseforge)
         headers.set("x-api-key", secrets.curseforge);
+      if (url.origin === WAGO_API && secrets.wago)
+        headers.set("Authorization", `Bearer ${secrets.wago}`);
       const response = await fetcher(url.href, {
         headers,
         redirect: "manual",

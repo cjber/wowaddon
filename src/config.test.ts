@@ -118,3 +118,23 @@ test("Forever ignores legacy WOW_ADDONS, including a configured default flavor",
     openContext({ flavor: "forever", env: { ...env, WOW_ADDONS: era } }),
   ).rejects.toMatchObject({ code: "CONFIG_MISSING" });
 });
+test("backups go under XDG_STATE_HOME per flavor and keep the configured count", async () => {
+  const { root, config, env } = await home();
+  const addonsDir = await dir(join(root, "addons"));
+  expect((await openContext({ addonsDir, env })).backups).toEqual({
+    dir: join(root, ".local/state/wowaddon/backups/era"),
+    keep: 5,
+  });
+  await writeFile(join(config, "config.json"), JSON.stringify({ backupKeep: 0 }));
+  expect(
+    (
+      await openContext({
+        flavor: "forever",
+        addonsDir,
+        env: { ...env, XDG_STATE_HOME: join(root, "s") },
+      })
+    ).backups,
+  ).toEqual({ dir: join(root, "s/wowaddon/backups/forever"), keep: 0 });
+  await writeFile(join(config, "config.json"), JSON.stringify({ backupKeep: -1 }));
+  await expect(openContext({ addonsDir, env })).rejects.toMatchObject({ code: "CONFIG_INVALID" });
+});
