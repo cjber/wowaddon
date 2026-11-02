@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `wowaddon search`, `browse`, `info` and `categories`: find addons across CurseForge, GitHub (via
+  the WowUp Hub index), WoWInterface and Tukui, filtered to the flavor, sorted by relevance,
+  downloads, update date or name, by category, with details, links and the latest changelog. Each
+  result's `ref` goes straight to `add`. Where a source cannot match its website is stated in the
+  help, schema and README.
+- `wowaddon adopt`: takes over installed addons wowaddon does not manage, matched by WowUp's own
+  records (read only), the TOC's project IDs or the TOC title, behind one WTF backup. wowaddon now
+  fully replaces WowUp.
+- `check` lists untracked AddOns folders in `untracked`.
+- A browse view in the TUI (`tab`): trending on open, `/` search, `o` sort, category groups that
+  fold, details on `Enter` and one-key install with `i`. Both views share one frame, so switching
+  keeps the page height and each view's place, and colours come from the terminal's palette.
+
 ## [2.0.2] - 2026-11-02
 
 ### Fixed

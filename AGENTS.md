@@ -1,8 +1,9 @@
 # AGENTS.md
 
-wowaddon is a CLI and terminal UI that installs and updates WoW addons from GitHub,
+wowaddon is a CLI and terminal UI that finds, installs and updates WoW addons from GitHub,
 CurseForge, WoWInterface, Tukui and Wago Addons into a WoW: Classic Era or WoW: Forever AddOns folder, driven
-by a small per-flavor text manifest.
+by a small per-flavor text manifest. It fully replaces WowUp: search and browse match the addon
+websites as far as each source's API allows, and `adopt` takes over what WowUp installed.
 
 ## Commands
 
@@ -24,35 +25,44 @@ merged `main` commit and push the tag; `.github/workflows/release.yml` publishes
 
 ## Layout
 
-- `src/types.ts` — shared contracts (`Flavor`, `Entry`, `Row`, `Context`, ...).
-- `src/service.ts` — the only API the CLI and TUI call: `openContext`, `listRows`,
-  `addAddon`, `syncAddons`, `removeAddon`, `parseRef`. Everything else (sources, install,
+- `src/types.ts`: shared contracts (`Flavor`, `Entry`, `Row`, `Context`, ...).
+- `src/service.ts`: the only API the CLI and TUI call: `openContext`, `listRows`,
+  `addAddon`, `syncAddons`, `removeAddon`, `parseRef`, `findAddons`, `addonInfo`,
+  `listCategories`, `listUntracked`, `adoptAddons`. Everything else (sources, install,
   backup, state, config, manifest, refs, http) is an implementation detail behind it.
-- `src/cli.ts` — `runCli(argv)`; returns an exit code, or `undefined` to hand off to the TUI. Its
+- `src/sources/` installs from each source; `src/discover/` searches, browses and describes
+  addons, one file per source plus `src/discover/index.ts`, which merges results and holds `sourceNotes`, the
+  per-source parity notes that help, schema and the README repeat. `src/text.ts` turns HTML,
+  BBCode and Markdown descriptions into plain text.
+- `src/adopt.ts` matches untracked AddOns folders to sources; `src/wowup.ts` reads WowUp's
+  addon records, read only.
+- `src/cli.ts`: `runCli(argv)`; returns an exit code, or `undefined` to hand off to the TUI. Its
   `specs` table is the one source for argument parsing, `--help` and `wowaddon schema`; a new
   command or flag goes there. The `--json` envelope and exit codes are a documented contract:
   a change that removes or redefines a field bumps `SCHEMA_VERSION` and goes in the CHANGELOG.
 - `skills/wowaddon/SKILL.md`: the agent skill shipped to users; keep it in step with the CLI.
-- `src/tui/` — the terminal UI. `src/tui/model.ts` holds pure state transitions and is unit-tested
-  directly; `src/tui/App.tsx` renders it, `src/tui/useAddons.ts` manages async actions, and
+- `src/tui/`: the terminal UI. `src/tui/model.ts` and `src/tui/browse.ts` (the browse view) hold
+  pure state transitions and are unit-tested directly; `src/tui/App.tsx` renders it, `src/tui/useAddons.ts` manages async actions, and
   `src/tui/keymap.ts` handles keys.
-- `src/testing/` — offline fixtures (injected `fetch`, fixture zips) shared by the tests.
+- `src/testing/`: offline fixtures (injected `fetch`, fixture zips) shared by the tests.
 
 ## Rules
 
 - Tests are offline only. `fetch` is injected via `setFetch()` in `src/http.ts`; an unexpected
   real network call is a test failure, not a skip.
 - Never touch an addon folder that is a symlink, contains `.git`, or sits inside a git
-  worktree — skip it and say why. That is what keeps this repo's own addons live during
+  worktree: skip it and say why. That is what keeps this repo's own addons live during
   development.
 - `sync` snapshots the flavor's `WTF` folder before its first change and changes nothing if the
   snapshot fails. Tests keep `HOME` and the state directory inside a scratch dir.
 - `--dry-run` and `check` never take the lock or write the manifest, state or AddOns folder.
 - Secrets (GitHub token, optional CurseForge key, Wago Addons key) come from env vars, `~/.config/wowaddon/`
-  token files, or `gh auth token` — never written into the user’s config.json, the manifest or state
+  token files, or `gh auth token`: never written into the user’s config.json, the manifest or state
   files.
 - A GitHub token goes only to `api.github.com`; a CurseForge key only to
   `api.curseforge.com`; a Wago key only to `addons.wago.io`. Never to a download host.
+- The TUI's views share one frame with fixed heights, so switching views never moves a line;
+  `App.test.tsx` checks it. Keep that when adding a view or a pane.
 - Commits are signed (`git commit -S`) with the personal email.
 - Quality: load `.agents/skills/sift-project/SKILL.md` before cleanup, dead-code or refactoring
   work.
