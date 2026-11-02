@@ -19,8 +19,10 @@ export interface ArchiveOptions {
 function bad(message: string): never {
   throw new WowaddonError("ARCHIVE_INVALID", message);
 }
+// Windows-made ZIPs (AtlasLoot Classic Forever among them) separate paths with backslashes, against
+// the ZIP spec; read them as slashes, so every segment still meets the same checks.
 function zipPath(entry: Entry): string {
-  const path = entry.filename.replace(/\/$/, "");
+  const path = entry.filename.replaceAll("\\", "/").replace(/\/$/, "");
   if (!path || path.startsWith("/") || path.split("/").some((part) => !safeFolder(part)))
     bad(`Unsafe ZIP path: ${entry.filename}`);
   const mode = (entry.externalFileAttributes >>> 16) & 0o170000;

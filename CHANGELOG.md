@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Packages zipped on Windows with backslash paths, such as AtlasLoot Classic Forever 1.2.7, install
+  instead of failing with "Unsafe ZIP path". Paths that climb out of the AddOns folder still fail.
+
 ## [2.0.0] - 2026-11-02
 
 ### Added
