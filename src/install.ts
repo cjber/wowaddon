@@ -336,8 +336,12 @@ export async function recoverPending(ctx: Context): Promise<void> {
   await rollback(ctx, pending);
   ctx.notices.push("Recovered an interrupted addon installation from its backups.");
 }
+export const DEV_SKIPPED =
+  "dev link, skipped: to install a release here, remove the symlink or checkout, then run sync";
 export interface InstallOptions {
   adopt?: boolean;
+  // Stops once the download is read and the folders are checked: the row says what a real run would do.
+  dryRun?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: Progress) => void;
   // Runs after the download is read, just before the AddOns folder changes.
@@ -381,6 +385,9 @@ async function preflight(
   }
   return true;
 }
+const installFolders = (state: State, id: string, archive: Archive) => [
+  ...new Set([...(state.addons[id]?.folders ?? []), ...archive.folders]),
+];
 async function transact(
   ctx: Context,
   state: State,
@@ -394,7 +401,7 @@ async function transact(
       "RECOVERY_BLOCKED",
       "An interrupted transaction still needs recovery; its backups have been preserved.",
     );
-  const folders = [...new Set([...(state.addons[id]?.folders ?? []), ...archive.folders])];
+  const folders = installFolders(state, id, archive);
   if (!(await preflight(ctx, state, id, folders, !!opts.adopt))) return false;
   checkAbort(opts.signal);
   const txDir = join(dirname(ctx.addonsDir), `.wowaddon-${crypto.randomUUID()}`);
@@ -430,7 +437,7 @@ async function transact(
       for (const operation of pending.operations) {
         checkAbort(opts.signal);
         if (!(await preflight(ctx, state, id, [operation.folder], !!opts.adopt)))
-          throw new WowaddonError("DEV_PROTECTED", "dev link, skipped");
+          throw new WowaddonError("DEV_PROTECTED", DEV_SKIPPED);
         if (operation.hadOld)
           await (opts.rename ?? rename)(
             join(ctx.addonsDir, operation.folder),
@@ -482,11 +489,13 @@ export async function installAddon(
   const progress = (phase: Progress["phase"], message?: string) =>
     opts.onProgress?.({ id: entry.id, phase, message });
   checkAbort(opts.signal);
-  if (await isProtected(ctx, entry, installed)) {
-    progress("skipped", "dev link, skipped");
-    return { entry, installed, latest: release, status: "dev", message: "dev link, skipped" };
-  }
-  if (installed?.versionKey === release.versionKey && (await foldersPresent(ctx, installed))) {
+  const skipDev = (): Row => {
+    progress("skipped", DEV_SKIPPED);
+    return { entry, installed, latest: release, status: "dev", message: DEV_SKIPPED };
+  };
+  if (await isProtected(ctx, entry, installed)) return skipDev();
+  const present = !!installed && (await foldersPresent(ctx, installed));
+  if (present && installed?.versionKey === release.versionKey) {
     progress("skipped", "up to date");
     return { entry, installed, latest: release, status: "current", message: "up to date" };
   }
@@ -503,6 +512,17 @@ export async function installAddon(
     source: release.archive === "source",
     signal: opts.signal,
   });
+  if (opts.dryRun) {
+    const folders = installFolders(state, entry.id, archive);
+    if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt))) return skipDev();
+    return {
+      entry,
+      installed,
+      latest: release,
+      status: present ? "update" : "missing",
+      message: release.note,
+    };
+  }
   await opts.beforeChange?.();
   progress("installing");
   const next: Installed = {
@@ -511,10 +531,7 @@ export async function installAddon(
     folders: archive.folders,
     installedAt: new Date().toISOString(),
   };
-  if (!(await transact(ctx, state, entry.id, archive, next, opts))) {
-    progress("skipped", "dev link, skipped");
-    return { entry, installed, latest: release, status: "dev", message: "dev link, skipped" };
-  }
+  if (!(await transact(ctx, state, entry.id, archive, next, opts))) return skipDev();
   progress("done", release.note);
   return { entry, installed: next, latest: release, status: "current", message: release.note };
 }

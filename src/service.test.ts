@@ -91,11 +91,51 @@ test("add, local list, unchanged sync, and remove use the service contract", asy
   expect((await readState(fixture.ctx)).addons).toEqual({});
   expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
 });
-test("unmanaged status supports a subsequent adopt", async () => {
+test("an add stopped by an unmanaged folder leaves the manifest alone, so --adopt can retry it", async () => {
   await mkdir(join(fixture.ctx.addonsDir, "Foo"));
   await installRoutes();
-  expect((await addAddon(fixture.ctx, "a/b", { install: true })).status).toBe("unmanaged");
+  expect(await addAddon(fixture.ctx, "a/b", { install: true, dryRun: true })).toMatchObject({
+    status: "unmanaged",
+    code: "UNMANAGED",
+  });
+  expect(await addAddon(fixture.ctx, "a/b", { install: true })).toMatchObject({
+    status: "unmanaged",
+    code: "UNMANAGED",
+  });
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
+  expect(
+    (await addAddon(fixture.ctx, "a/b", { install: true, adopt: true, dryRun: true })).status,
+  ).toBe("missing");
+  expect((await addAddon(fixture.ctx, "a/b", { install: true, adopt: true })).status).toBe(
+    "current",
+  );
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+});
+test("a sync dry run predicts an unmanaged folder like the real sync", async () => {
+  await writeFile(manifestPath(fixture.ctx), "gh a/b\n");
+  await mkdir(join(fixture.ctx.addonsDir, "Foo"));
+  await installRoutes();
+  const dry = await syncAddons(fixture.ctx, { dryRun: true });
+  expect(dry).toEqual({ rows: [expect.objectContaining({ status: "unmanaged" })] });
+  expect((await syncAddons(fixture.ctx, { dryRun: true, adopt: true })).rows[0].status).toBe(
+    "missing",
+  );
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+  expect(await readdir(join(fixture.ctx.addonsDir, "Foo"))).toEqual([]);
+  expect((await syncAddons(fixture.ctx, {})).rows[0].status).toBe("unmanaged");
   expect((await syncAddons(fixture.ctx, { adopt: true })).rows[0].status).toBe("current");
+});
+test("an add onto a symlinked folder says how to replace the link", async () => {
+  await installRoutes();
+  await mkdir(join(fixture.root, "dev/Foo"), { recursive: true });
+  await symlink(join(fixture.root, "dev/Foo"), join(fixture.ctx.addonsDir, "Foo"));
+  for (const dryRun of [true, false]) {
+    const row = await addAddon(fixture.ctx, "a/b", { install: true, dryRun });
+    expect(row.status).toBe("dev");
+    expect(row.message).toContain("remove the symlink or checkout, then run sync");
+  }
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\n");
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
 });
 test("protected owned addon makes no metadata or download requests", async () => {
   await addAddon(fixture.ctx, "a/b", { install: false });
@@ -238,7 +278,8 @@ test("dry runs report the change and leave manifest, state and folders alone", a
   const added = await addAddon(fixture.ctx, "a/b", { install: true, dryRun: true });
   expect(added).toMatchObject({ status: "missing", latest: { version: "v1" } });
   expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
-  expect(calls).toHaveLength(1);
+  expect(await readdir(fixture.ctx.addonsDir)).toEqual([]);
+  expect(calls).toHaveLength(2);
   await addAddon(fixture.ctx, "a/b", { install: true });
   const before = await readState(fixture.ctx);
   const removal = await removeAddon(fixture.ctx, "a/b", { dryRun: true });

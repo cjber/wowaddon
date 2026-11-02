@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-02
+
+### Fixed
+
+- `add` stopped by a folder installed outside wowaddon (`unmanaged`) no longer writes the addon to
+  the manifest, so rerunning it with `--adopt` takes the folder over instead of failing with
+  `DUPLICATE`.
+- `add --dry-run` and `sync --dry-run` follow the real run's path: they download each release they
+  would install and check its folders, so they report `unmanaged` or `dev` exactly when the real
+  run would. `sync --dry-run` also honours `--adopt`.
+- A skipped dev link says how to replace it: remove the symlink or checkout, then run sync.
+- The TUI's install key reports what an install did instead of always saying "installed", and
+  taking over an install stopped by an unmanaged folder reruns it with adopt.
+
 ## [2.1.1] - 2026-11-02
 
 ### Changed

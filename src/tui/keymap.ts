@@ -78,7 +78,7 @@ export function handleKey(
       if (state.mode === "remove-confirm") void actions.runRemove(state.confirmId);
       else {
         update(closeConfirm);
-        void actions.runSync([state.confirmId], true);
+        void actions.runAdopt(state.confirmId);
       }
     } else if (key.name === "escape" || key.sequence === "n") update(cancelConfirm);
     return;
