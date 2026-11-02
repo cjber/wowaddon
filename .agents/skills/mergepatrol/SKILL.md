@@ -1,5 +1,4 @@
 ---
-
 name: mergepatrol
 description: This repo merges pull requests through Mergepatrol, a label-driven merge queue. Use when merging, landing or shipping a PR, queueing or dequeueing one, reading a Mergepatrol comment or label on a PR, or working the review comments on a queued PR.
 ---
@@ -56,12 +55,12 @@ Mergepatrol keeps one thread per finding across pushes. When the next review sti
 
 ### The states
 
-| State         | Means                                          | What you do                                                                                                                 |
-| ------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `open`        | Not worked yet.                                | Read it, and the code it points at. Then fix it, dismiss it, or mark it `needs-human`.                                      |
-| `fixed`       | A pushed commit does what it asks.             | Reply in the thread with the commit's short SHA and one line on what changed, then resolve it. Resolve only after the push. |
-| `dismissed`   | It doesn't apply, for a reason the code shows. | Reply in the thread with the reason and the evidence: a file and line, a test, a doc. Then resolve it.                      |
-| `needs-human` | Only a human can decide it.                    | Reply with the decision needed and the options, tag the person, and leave it unresolved.                                    |
+| State | Means | What you do |
+| --- | --- | --- |
+| `open` | Not worked yet. | Read it, and the code it points at. Then fix it, dismiss it, or mark it `needs-human`. |
+| `fixed` | A pushed commit does what it asks. | Reply in the thread with the commit's short SHA and one line on what changed, then resolve it. Resolve only after the push. |
+| `dismissed` | It doesn't apply, for a reason the code shows. | Reply in the thread with the reason and the evidence: a file and line, a test, a doc. Then resolve it. |
+| `needs-human` | Only a human can decide it. | Reply with the decision needed and the options, tag the person, and leave it unresolved. |
 
 A comment is `needs-human` only for one of these: what the PR should do or include (scope), a product or design call, credentials or access you don't have, a change outside this repo, or a reviewer who opened it again after you dismissed it. "I'm not sure" is not one: read more code, run it, or ask the reviewer first. The review stays adversarial: on your next push it reads your replies, and opens a dismissed thread again if your reason doesn't hold in the code.
 
@@ -92,13 +91,13 @@ Keep one comment on the PR that lists every comment and its state, and edit it e
 <!-- mergepatrol-review-ledger -->
 **Review ledger** (head `def5678`)
 
-| Comment                                       | Raised on            | State       | Note                                                             |
-| --------------------------------------------- | -------------------- | ----------- | ---------------------------------------------------------------- |
-| Review: retry loop has no cap, `src/retry.rs` | `abc1234`            | fixed       | `def5678` caps it at 5                                           |
-| Review: lock order, `src/queue.rs:88`         | `abc1234`            | dismissed   | the caller holds the lock, `src/lane.rs:40`                      |
-| @alice: rename `Lane::go`                     | `def5678`            | fixed       | renamed in `def5678`                                             |
-| Review: never run on a device                 | `abc1234`, `def5678` | needs-human | no device here; @bob, please run the record-and-send flow on iOS |
-| Review: drop the v1 endpoint?                 | `def5678`            | needs-human | asked a human; @bob: keep v1 for old clients, or drop it now?    |
+| Comment | Raised on | State | Note |
+| --- | --- | --- | --- |
+| Review: retry loop has no cap, `src/retry.rs` | `abc1234` | fixed | `def5678` caps it at 5 |
+| Review: lock order, `src/queue.rs:88` | `abc1234` | dismissed | the caller holds the lock, `src/lane.rs:40` |
+| @alice: rename `Lane::go` | `def5678` | fixed | renamed in `def5678` |
+| Review: never run on a device | `abc1234`, `def5678` | needs-human | no device here; @bob, please run the record-and-send flow on iOS |
+| Review: drop the v1 endpoint? | `def5678` | needs-human | asked a human; @bob: keep v1 for old clients, or drop it now? |
 ```
 
 ### What not to do
