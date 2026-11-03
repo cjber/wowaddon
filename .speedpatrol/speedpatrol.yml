@@ -1,8 +1,8 @@
 version: 1
 
-# Speedpatrol profile for wowaddon, a Bun CLI and TUI. `cli.startup` times the app itself; the gate.*
+# Speedpatrol profile for wowaddon, a Bun CLI and TUI. `cli.schema` times the app itself; the gate.*
 # benchmarks time the repo's own gate, which also grows with every test added, so the pull request
-# workflow compares `cli.startup` only.
+# workflow compares `cli.schema` only.
 project:
   name: wowaddon
   source: .
@@ -22,12 +22,6 @@ benchmarks:
     kind: command
     critical: true
     title: "A CLI call from a cold start: wowaddon schema"
-    run: "env HOME=/nonexistent XDG_CONFIG_HOME=/nonexistent bun src/index.tsx schema >/dev/null"
-    profile: { enabled: false }
-  - id: cli.startup
-    kind: command
-    critical: true
-    title: "CLI start to exit: load every module and print the schema, offline"
     run: "env HOME=/nonexistent XDG_CONFIG_HOME=/nonexistent bun src/index.tsx schema >/dev/null"
     profile: { enabled: false }
   - id: gate.test
