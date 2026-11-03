@@ -1,0 +1,26 @@
+name: Speedpatrol
+
+# Compares this PR's CLI speed with its base branch and fails on a confirmed regression.
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - uses: agent-labs-dev/speedpatrol@726e8f5a08743ba46ab211860547a4bff901a502 # v0
+        with:
+          package: speedpatrol@0.2.0
+          benchmarks: cli.schema
+          rounds: 3
+          fail-on-regression: true
