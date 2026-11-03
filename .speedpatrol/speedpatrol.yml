@@ -1,7 +1,8 @@
 version: 1
 
-# Speedpatrol profile for wowaddon, a Bun CLI and TUI. The benchmarks are the repo's own gate: the test
-# suite, the type check and the linter, all of which a change to a hot path shows up in.
+# Speedpatrol profile for wowaddon, a Bun CLI and TUI. `cli.schema` times the app itself; the gate.*
+# benchmarks time the repo's own gate, which also grows with every test added, so the pull request
+# workflow compares `cli.schema` only.
 project:
   name: wowaddon
   source: .
@@ -17,6 +18,12 @@ defaults:
   timeoutMs: 180000
   rounds: 2
 benchmarks:
+  - id: cli.schema
+    kind: command
+    critical: true
+    title: "A CLI call from a cold start: wowaddon schema"
+    run: "env HOME=/nonexistent XDG_CONFIG_HOME=/nonexistent bun src/index.tsx schema >/dev/null"
+    profile: { enabled: false }
   - id: gate.test
     kind: command
     critical: true
