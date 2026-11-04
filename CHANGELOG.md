@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The TUI exits when its terminal closes (SIGHUP, stdin ending, or an EIO or EPIPE error on the
+  terminal) instead of running on in the background with no terminal. SIGQUIT and SIGPIPE exit it too.
+
 ## [2.1.4] - 2026-11-04
 
 ### Added
