@@ -47,6 +47,19 @@ test("CF slug writes numeric ID with title", async () => {
     code: "DUPLICATE",
   });
 });
+test("CF numeric ID writes the project title", async () => {
+  setFetch(
+    routeFetch({
+      "https://api.cfwidget.com/wow/addons/298842": { id: 298842, title: "Leatrix Maps" },
+    }).fetch,
+  );
+  await addAddon(fixture.ctx, "cf:298842", { install: false });
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 298842  # Leatrix Maps\n");
+});
+test("CF numeric ID without a reachable title writes the bare ID", async () => {
+  await addAddon(fixture.ctx, "cf:298842", { install: false });
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 298842\n");
+});
 async function installRoutes() {
   const bytes = await zip({ "Foo/Foo_Forever.toc": "## Interface: 16001", "Foo/init.lua": "x" });
   const calls: string[] = [];

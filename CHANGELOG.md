@@ -15,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   run ends with a one-line stderr notice when a newer wowaddon exists. `sync`, `add`, `check` and
   `list --refresh` cache what they resolve too. `WOWADDON_NO_UPDATE_CHECK=1` turns it off.
 
+### Fixed
+
+- `add` names a CurseForge addon given by its numeric ID or a cached slug in the manifest
+  (`cf 298842  # Leatrix Maps`), so `list` shows its name rather than the bare ID. A failed title
+  lookup still adds the addon, unnamed.
+
 ## [2.1.3] - 2026-11-02
 
 ### Fixed
