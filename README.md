@@ -64,6 +64,17 @@ that neither settles is checked by downloading the release, as `sync --dry-run` 
 an untracked folder named unlike the addon that the source does not list, nor a new folder that an
 update to an installed addon adds; `sync --dry-run` finds both.
 
+An interactive run (stderr is a terminal) checks for updates in the background once its command
+has finished: a detached process asks GitHub for the latest wowaddon release and resolves each
+addon's latest release, and the next run reads what it found. So `list` shows `update` and
+`current` without `--refresh`, and when a newer wowaddon exists a run ends with one line on
+stderr: `wowaddon 2.2.0 is available (you have 2.1.3): <releases page>`. Nothing waits on the
+network. Addons are checked at most hourly and wowaddon every six hours; a failed check retries
+after 15 minutes, doubling up to a day. `sync`, `add`, `check` and `list --refresh` record the
+releases they resolve as well. A cached release counts only if it was fetched after the addon was
+installed and within a week, otherwise the row stays `unknown`. `--json` output never carries the
+notice, and `WOWADDON_NO_UPDATE_CHECK=1` turns both checks and the notice off.
+
 | Exit code | Meaning                                                 |
 | --------- | ------------------------------------------------------- |
 | `0`       | done; dev-link skips count as success                   |
@@ -177,6 +188,8 @@ State lives under `${XDG_CONFIG_HOME:-~/.config}/wowaddon/`:
 - `state/<flavor>.json`: installed versions and owned folders, written atomically
 - `cache/cf-slugs.json`: CurseForge slug-to-id cache
 - `cache/wowi-filelist.json`: WoWInterface file list for search, refreshed after six hours
+- `cache/releases-<flavor>.json`: each addon's latest release and when it was fetched
+- `cache/checks/`: one file per background check (`self`, `addons-<flavor>`): when it is next due, failures so far, and for `self` the latest wowaddon release
 
 A pre-existing `addons.txt` is copied to `era.txt` the first time `era.txt` is missing; the
 original is left alone and wowaddon says so once.

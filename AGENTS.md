@@ -29,7 +29,8 @@ merged `main` commit and push the tag; `.github/workflows/release.yml` publishes
 - `src/types.ts`: shared contracts (`Flavor`, `Entry`, `Row`, `Context`, ...).
 - `src/service.ts`: the only API the CLI and TUI call: `openContext`, `listRows`,
   `addAddon`, `syncAddons`, `removeAddon`, `parseRef`, `findAddons`, `addonInfo`,
-  `listCategories`, `listUntracked`, `adoptAddons`. Everything else (sources, install,
+  `listCategories`, `listUntracked`, `adoptAddons`, and the background update checks
+  (`startBackgroundChecks`, `updateNotice`, `runBackgroundChecks`, from `src/background.ts`). Everything else (sources, install,
   backup, state, config, manifest, refs, http) is an implementation detail behind it.
 - `src/sources/` installs from each source; `src/discover/` searches, browses and describes
   addons, one file per source plus `src/discover/index.ts`, which merges results and holds `sourceNotes`, the

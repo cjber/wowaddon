@@ -116,6 +116,9 @@ const adoptAddonsMock = mock(
 // mock.module patches the module registry process-wide, not just for this file, so capture
 // the real module first and put it back once this file's tests finish.
 const realService = { ...(await import("./service")) };
+const startChecksMock = mock(async (_ctx: Context, _opts: { addons: boolean }) => {});
+const updateNoticeMock = mock(async (_ctx: Context): Promise<string | undefined> => undefined);
+const runChecksMock = mock(async (_ctx: Context, _keys: string[]) => {});
 
 mock.module("./service", () => ({
   openContext: openContextMock,
@@ -129,6 +132,10 @@ mock.module("./service", () => ({
   listCategories: listCategoriesMock,
   listUntracked: listUntrackedMock,
   adoptAddons: adoptAddonsMock,
+  BACKGROUND_COMMAND: "__background",
+  startBackgroundChecks: startChecksMock,
+  updateNotice: updateNoticeMock,
+  runBackgroundChecks: runChecksMock,
 }));
 
 const { runCli } = await import("./cli");
@@ -196,6 +203,9 @@ beforeEach(() => {
     listCategoriesMock,
     listUntrackedMock,
     adoptAddonsMock,
+    startChecksMock,
+    updateNoticeMock,
+    runChecksMock,
   ])
     m.mockClear();
   listUntrackedMock.mockImplementation(async () => []);
@@ -323,6 +333,27 @@ describe("remove", () => {
   test("passes the abort signal through", async () => {
     await runCli(["remove", "cf:6124"]);
     expect(removeAddonMock.mock.calls[0][2]?.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe("background update checks", () => {
+  test("a finished command starts the checks; --json never asks for the notice", async () => {
+    expect(await runCli(["list"])).toBe(0);
+    expect(startChecksMock.mock.calls[0][1]).toEqual({ addons: true });
+    expect(updateNoticeMock).toHaveBeenCalledTimes(1);
+    updateNoticeMock.mockClear();
+    expect(await runCli(["list", "--json"])).toBe(0);
+    expect(updateNoticeMock).not.toHaveBeenCalled();
+  });
+
+  test("the hidden worker command runs the checks silently and exits 0", async () => {
+    runChecksMock.mockImplementationOnce(async () => {
+      throw new Error("offline");
+    });
+    expect(await runCli(["__background", "--flavor", "forever", "self", "addons:forever"])).toBe(0);
+    expect(runChecksMock.mock.calls[0][1]).toEqual(["self", "addons:forever"]);
+    expect(openContextMock.mock.calls[0][0]).toMatchObject({ flavor: "forever" });
+    expect([...logs, ...errs]).toEqual([]);
   });
 });
 

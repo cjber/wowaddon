@@ -1,0 +1,3 @@
+[test]
+# No test may start a real background update worker.
+preload = ["./src/testing/preload.ts"]

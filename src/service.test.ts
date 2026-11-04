@@ -96,7 +96,8 @@ test("add, local list, unchanged sync, and remove use the service contract", asy
   });
   expect(row.status).toBe("current");
   expect(progress.map((p) => p.phase)).toEqual(["resolving", "downloading", "installing", "done"]);
-  expect((await listRows(fixture.ctx, { refresh: false }))[0].status).toBe("unknown");
+  // The release the install resolved is cached, so a local list knows it is current.
+  expect((await listRows(fixture.ctx, { refresh: false }))[0].status).toBe("current");
   expect(calls).toHaveLength(2);
   expect((await syncAddons(fixture.ctx, { ids: ["https://github.com/A/B"] })).rows[0].message).toBe(
     "up to date",

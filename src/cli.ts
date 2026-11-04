@@ -4,6 +4,7 @@ import {
   addAddon,
   addonInfo,
   adoptAddons,
+  BACKGROUND_COMMAND,
   findAddons,
   listCategories,
   listRows,
@@ -12,7 +13,10 @@ import {
   type Query,
   type Removal,
   removeAddon,
+  runBackgroundChecks,
+  startBackgroundChecks,
   syncAddons,
+  updateNotice,
 } from "./service";
 import {
   type AddonInfo,
@@ -98,7 +102,8 @@ const specs: Record<string, CommandSpec> = {
   },
   list: {
     args: "",
-    summary: "list managed addons from local state",
+    summary:
+      "list managed addons from local state and the latest releases cached by earlier runs, without network",
     flags: { refresh: { help: "also resolve each addon's latest release" } },
     output: "{ ...envelope, addons: Row[] }",
   },
@@ -200,7 +205,8 @@ const statuses: Record<Row["status"], string> = {
   missing: "not installed; sync installs it",
   update: "installed, and a newer release exists; sync updates it",
   current: "installed at the latest release",
-  unknown: "installed; latest release not resolved (list without --refresh)",
+  unknown:
+    "installed; no recent release cached since it was installed (list --refresh resolves it)",
   dev: "a dev link (symlink, git checkout or worktree); never touched",
   unmanaged:
     "its folder exists but was installed outside wowaddon; rerun the sync or add with --adopt",
@@ -269,6 +275,8 @@ function schema() {
       GH_TOKEN: "GitHub token, sent only to api.github.com",
       CF_API_KEY: "optional CurseForge key, sent only to api.curseforge.com",
       WAGO_ADDONS_API_KEY: "Wago Addons key, sent only to addons.wago.io",
+      WOWADDON_NO_UPDATE_CHECK:
+        "set to stop interactive runs checking in the background for addon and wowaddon updates",
     },
   };
 }
@@ -709,6 +717,17 @@ export async function runCli(argv: string[]): Promise<number | undefined> {
     return exitCodes.usage;
   }
 
+  // The detached worker a run starts for its update checks: silent, and always exits cleanly.
+  if (parsed.command === BACKGROUND_COMMAND) {
+    try {
+      const ctx = await openContext({ ...parsed.globals, env: process.env });
+      await runBackgroundChecks(ctx, parsed.rest);
+    } catch {
+      // Nothing to report to: the next run retries on its schedule.
+    }
+    return exitCodes.ok;
+  }
+
   if (parsed.help) {
     console.log(HELP);
     return exitCodes.ok;
@@ -772,6 +791,9 @@ export async function runCli(argv: string[]): Promise<number | undefined> {
           }),
         );
       else for (const line of outcome.lines) console.log(line);
+      await startBackgroundChecks(ctx, { addons: true });
+      const notice = parsed.json ? undefined : await updateNotice(ctx);
+      if (notice && process.stderr.isTTY) warn(notice);
       return outcome.code;
     } catch (error) {
       return fail(error, abortController.signal.aborted);
