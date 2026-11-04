@@ -36,8 +36,10 @@ afterEach(async () => {
   offline();
   await fixture.cleanup();
 });
-const checks = async () =>
-  JSON.parse(await readFile(join(fixture.ctx.configDir, "cache", "checks.json"), "utf8"));
+const check = async (name: string) =>
+  JSON.parse(
+    await readFile(join(fixture.ctx.configDir, "cache", "checks", `${name}.json`), "utf8"),
+  );
 
 test("a failure backs off from 15 minutes, doubling to a day; a success waits the interval", () => {
   let schedule = nextSchedule(undefined, false, HOUR, 0);
@@ -112,10 +114,10 @@ test("a cached release is used only when fetched after the install and within a 
 
 test("a complete refresh replaces the cache and settles the addon check; all-failed backs off", async () => {
   await recordReleases(fixture.ctx, [row], { complete: true }, NOW);
-  expect((await checks()).schedules["addons:forever"]).toEqual({ nextAt: NOW + HOUR, failures: 0 });
+  expect(await check("addons-forever")).toEqual({ nextAt: NOW + HOUR, failures: 0 });
   const failed: Row = { entry, status: "error", message: "offline" };
   await recordReleases(fixture.ctx, [failed], { complete: true }, NOW + HOUR);
-  expect((await checks()).schedules["addons:forever"].failures).toBe(1);
+  expect((await check("addons-forever")).failures).toBe(1);
   // The failed row keeps its last release; an addon gone from the manifest is dropped.
   expect((await cachedReleases(fixture.ctx, NOW))(entry)).toEqual(release);
   await recordReleases(fixture.ctx, [], { complete: true }, NOW);
@@ -125,8 +127,7 @@ test("a complete refresh replaces the cache and settles the addon check; all-fai
 test("the worker records a newer release, and the notice reads it from the cache", async () => {
   setFetch(routeFetch({ [LATEST]: { tag_name: "v9.0.0" } }).fetch);
   await runBackground(fixture.ctx, ["self"], async () => {}, NOW);
-  expect((await checks()).latestVersion).toBe("v9.0.0");
-  expect((await checks()).schedules.self.failures).toBe(0);
+  expect(await check("self")).toMatchObject({ latestVersion: "v9.0.0", failures: 0 });
   expect(await updateNotice(fixture.ctx, "2.1.3")).toBe(
     "wowaddon 9.0.0 is available (you have 2.1.3): https://github.com/cjber/wowaddon/releases",
   );
@@ -149,9 +150,8 @@ test("a failed self check backs off; a failed addon refresh does too", async () 
     },
     NOW,
   );
-  const { schedules } = await checks();
-  expect(schedules.self.failures).toBe(1);
-  expect(schedules["addons:forever"].failures).toBe(1);
+  expect((await check("self")).failures).toBe(1);
+  expect((await check("addons-forever")).failures).toBe(1);
 });
 
 test("a live lease keeps a second worker out; an expired one is taken over", async () => {
@@ -167,4 +167,19 @@ test("a live lease keeps a second worker out; an expired one is taken over", asy
   await runBackground(fixture.ctx, ["addons:forever"], refresh, NOW + 2 * HOUR);
   expect(refreshed).toBe(1);
   await expect(readFile(lease)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("a worker that outlived its lease leaves the newer worker's lease in place", async () => {
+  const lease = join(fixture.ctx.configDir, "cache", "background.lease");
+  const newer = JSON.stringify({ token: "newer", until: NOW + 2 * HOUR });
+  await runBackground(
+    fixture.ctx,
+    ["addons:forever"],
+    async () => {
+      // Another worker took over this lease after it expired.
+      await writeFile(lease, newer);
+    },
+    NOW,
+  );
+  expect(await readFile(lease, "utf8")).toBe(newer);
 });

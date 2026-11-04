@@ -189,7 +189,7 @@ State lives under `${XDG_CONFIG_HOME:-~/.config}/wowaddon/`:
 - `cache/cf-slugs.json`: CurseForge slug-to-id cache
 - `cache/wowi-filelist.json`: WoWInterface file list for search, refreshed after six hours
 - `cache/releases-<flavor>.json`: each addon's latest release and when it was fetched
-- `cache/checks.json`: when each background check is next due, and the latest wowaddon release
+- `cache/checks/`: one file per background check (`self`, `addons-<flavor>`): when it is next due, failures so far, and for `self` the latest wowaddon release
 
 A pre-existing `addons.txt` is copied to `era.txt` the first time `era.txt` is missing; the
 original is left alone and wowaddon says so once.

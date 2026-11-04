@@ -177,6 +177,7 @@ export async function listRows(
 ): Promise<Row[]> {
   beginProtectionChecks(ctx);
   const state = await readState(ctx);
+  const started = Date.now();
   const { manifest, errors } = await entries(ctx, opts.refresh, opts.signal);
   const cached = opts.refresh ? undefined : await cachedReleases(ctx);
   const rows: Row[] = [];
@@ -201,7 +202,7 @@ export async function listRows(
       rows.push(failure(entry, state, error));
     }
   }
-  if (opts.refresh) await recordReleases(ctx, rows, { complete: !opts.ids?.length });
+  if (opts.refresh) await recordReleases(ctx, rows, { complete: !opts.ids?.length }, started);
   return rows;
 }
 async function syncEntry(

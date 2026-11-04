@@ -26,8 +26,9 @@ export interface Schedule {
   nextAt: number;
   failures: number;
 }
-interface Checks {
-  schedules: Record<string, Schedule>;
+// One file per check, so the self check, a foreground refresh and another flavor's worker never
+// overwrite each other's record.
+interface Check extends Schedule {
   latestVersion?: string;
 }
 interface CachedRelease {
@@ -37,7 +38,8 @@ interface CachedRelease {
 type CheckKey = "self" | `addons:${string}`;
 
 const cacheDir = (ctx: Context) => join(ctx.configDir, "cache");
-const checksPath = (ctx: Context) => join(cacheDir(ctx), "checks.json");
+const checkPath = (ctx: Context, key: CheckKey) =>
+  join(cacheDir(ctx), "checks", `${key.replace(":", "-")}.json`);
 const releasesPath = (ctx: Context) => join(cacheDir(ctx), `releases-${ctx.flavor}.json`);
 const leasePath = (ctx: Context) => join(cacheDir(ctx), "background.lease");
 const addonsKey = (ctx: Context): CheckKey => `addons:${ctx.flavor}`;
@@ -53,21 +55,14 @@ async function readJson(path: string): Promise<Record<string, unknown>> {
     throw error;
   }
 }
-async function readChecks(ctx: Context): Promise<Checks> {
-  const data = await readJson(checksPath(ctx));
-  const schedules: Record<string, Schedule> = {};
-  if (isRecord(data.schedules))
-    for (const [key, value] of Object.entries(data.schedules))
-      if (isRecord(value) && Number.isFinite(value.nextAt) && Number.isFinite(value.failures))
-        schedules[key] = { nextAt: Number(value.nextAt), failures: Number(value.failures) };
+async function readCheck(ctx: Context, key: CheckKey): Promise<Check | undefined> {
+  const data = await readJson(checkPath(ctx, key));
+  if (!Number.isFinite(data.nextAt) || !Number.isFinite(data.failures)) return undefined;
   return {
-    schedules,
+    nextAt: Number(data.nextAt),
+    failures: Number(data.failures),
     ...(typeof data.latestVersion === "string" ? { latestVersion: data.latestVersion } : {}),
   };
-}
-async function updateChecks(ctx: Context, change: (checks: Checks) => Checks): Promise<void> {
-  await mkdir(cacheDir(ctx), { recursive: true });
-  await atomicWrite(checksPath(ctx), `${JSON.stringify(change(await readChecks(ctx)), null, 2)}\n`);
 }
 
 export function nextSchedule(
@@ -80,15 +75,18 @@ export function nextSchedule(
   const failures = (previous?.failures ?? 0) + 1;
   return { nextAt: now + Math.min(RETRY_FIRST * 2 ** (failures - 1), RETRY_MAX), failures };
 }
-async function settle(ctx: Context, key: CheckKey, ok: boolean, now: number): Promise<void> {
+async function settle(
+  ctx: Context,
+  key: CheckKey,
+  ok: boolean,
+  now: number,
+  found: { latestVersion?: string } = {},
+): Promise<void> {
+  const previous = await readCheck(ctx, key);
   const interval = key === "self" ? INTERVALS.self : INTERVALS.addons;
-  await updateChecks(ctx, (checks) => ({
-    ...checks,
-    schedules: {
-      ...checks.schedules,
-      [key]: nextSchedule(checks.schedules[key], ok, interval, now),
-    },
-  }));
+  const check: Check = { ...previous, ...found, ...nextSchedule(previous, ok, interval, now) };
+  await mkdir(join(cacheDir(ctx), "checks"), { recursive: true });
+  await atomicWrite(checkPath(ctx, key), `${JSON.stringify(check, null, 2)}\n`);
 }
 
 // Release caches -------------------------------------------------------------------------------
@@ -125,7 +123,8 @@ export async function cachedReleases(
   };
 }
 
-// Rows resolved by a refresh or a sync. A refresh of the whole manifest also counts as this
+// Rows resolved by a refresh or a sync, fetched at `now`: a refresh passes the time it started, so
+// an install that lands while it runs is newer than the fetch and the row stays unknown. A refresh of the whole manifest also counts as this
 // flavor's addon check, so no worker repeats it; when every row failed it counts as a failure.
 export async function recordReleases(
   ctx: Context,
@@ -176,14 +175,14 @@ export async function updateNotice(
 ): Promise<string | undefined> {
   try {
     if (contextEnv(ctx).WOWADDON_NO_UPDATE_CHECK) return undefined;
-    const { latestVersion } = await readChecks(ctx);
+    const latestVersion = (await readCheck(ctx, "self"))?.latestVersion;
     if (!latestVersion || !isNewer(latestVersion, current)) return undefined;
     return `wowaddon ${latestVersion.replace(/^v/, "")} is available (you have ${current}): ${RELEASES_URL}`;
   } catch {
     return undefined;
   }
 }
-async function checkSelf(ctx: Context): Promise<void> {
+async function latestSelfVersion(ctx: Context): Promise<string> {
   const credentials = await getCredentials(ctx);
   const release = await requestJson<{ tag_name?: unknown }>(
     "https://api.github.com/repos/cjber/wowaddon/releases/latest",
@@ -191,8 +190,7 @@ async function checkSelf(ctx: Context): Promise<void> {
   );
   if (typeof release.tag_name !== "string" || !parseVersion(release.tag_name))
     throw new Error("unexpected release tag");
-  const latestVersion = release.tag_name;
-  await updateChecks(ctx, (checks) => ({ ...checks, latestVersion }));
+  return release.tag_name;
 }
 
 // Launching and running the worker ---------------------------------------------------------------
@@ -223,10 +221,9 @@ export async function startBackgroundChecks(
   try {
     if (!backgroundEnabled(ctx, opts.interactive)) return;
     const now = opts.now ?? Date.now();
-    const { schedules } = await readChecks(ctx);
-    const keys = (["self", ...(opts.addons ? [addonsKey(ctx)] : [])] as CheckKey[]).filter(
-      (key) => (schedules[key]?.nextAt ?? 0) <= now,
-    );
+    const keys: CheckKey[] = [];
+    for (const key of ["self", ...(opts.addons ? [addonsKey(ctx)] : [])] as CheckKey[])
+      if (((await readCheck(ctx, key))?.nextAt ?? 0) <= now) keys.push(key);
     if (!keys.length) return;
     launch([
       ...selfCommand(),
@@ -244,22 +241,28 @@ export async function startBackgroundChecks(
 
 // One worker at a time across every run: the lease file is created exclusively and recovered
 // only once it has expired.
-async function takeLease(ctx: Context, now: number): Promise<boolean> {
+async function takeLease(ctx: Context, now: number): Promise<string | undefined> {
   await mkdir(cacheDir(ctx), { recursive: true });
+  const token = crypto.randomUUID();
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const handle = await open(leasePath(ctx), "wx");
-      await handle.writeFile(JSON.stringify({ pid: process.pid, until: now + LEASE_MS }));
+      await handle.writeFile(JSON.stringify({ token, pid: process.pid, until: now + LEASE_MS }));
       await handle.close();
-      return true;
+      return token;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const lease = await readJson(leasePath(ctx));
-      if (Number.isFinite(lease.until) && Number(lease.until) > now) return false;
+      if (Number.isFinite(lease.until) && Number(lease.until) > now) return undefined;
       await rm(leasePath(ctx), { force: true });
     }
   }
-  return false;
+  return undefined;
+}
+// A worker that outlived its lease leaves the newer worker's lease alone.
+async function releaseLease(ctx: Context, token: string): Promise<void> {
+  const lease = await readJson(leasePath(ctx)).catch((): Record<string, unknown> => ({}));
+  if (lease.token === token) await rm(leasePath(ctx), { force: true });
 }
 
 export async function runBackground(
@@ -268,12 +271,13 @@ export async function runBackground(
   refreshAddons: (ctx: Context) => Promise<unknown>,
   now = Date.now(),
 ): Promise<void> {
-  if (!(await takeLease(ctx, now))) return;
+  const token = await takeLease(ctx, now);
+  if (!token) return;
   try {
     for (const key of keys) {
       if (key === "self")
-        await checkSelf(ctx).then(
-          () => settle(ctx, "self", true, Date.now()),
+        await latestSelfVersion(ctx).then(
+          (latestVersion) => settle(ctx, "self", true, Date.now(), { latestVersion }),
           () => settle(ctx, "self", false, Date.now()),
         );
       else if (key === addonsKey(ctx))
@@ -281,6 +285,6 @@ export async function runBackground(
         await refreshAddons(ctx).catch(() => settle(ctx, key, false, Date.now()));
     }
   } finally {
-    await rm(leasePath(ctx), { force: true });
+    await releaseLease(ctx, token);
   }
 }
