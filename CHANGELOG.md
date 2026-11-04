@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-11-04
+
 ### Fixed
 
 - The TUI exits when its terminal closes (SIGHUP, stdin ending, or an EIO or EPIPE error on the
