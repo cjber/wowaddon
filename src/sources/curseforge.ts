@@ -196,6 +196,22 @@ async function listFiles(ctx: Context, id: string, signal?: AbortSignal): Promis
     throw new WowaddonError("CF_UNREACHABLE", "Couldn't reach CurseForge (try again later).");
   }
 }
+// The manifest names a project by a comment; a numeric ID or a cached slug resolves without one.
+export async function cfProjectTitle(
+  id: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    const data = await requestJson<{ title?: unknown }>(
+      `https://api.cfwidget.com/wow/addons/${id}`,
+      { signal },
+    );
+    return typeof data.title === "string" ? data.title.trim() || undefined : undefined;
+  } catch (error) {
+    if (error instanceof WowaddonError && error.code === "ABORTED") throw error;
+    return undefined;
+  }
+}
 export async function resolveCurseforge(
   ctx: Context,
   ref: string,

@@ -17,7 +17,12 @@ import {
 } from "./install";
 import { readManifest, writeManifest } from "./manifest";
 import { canonicalId, parseRef as parseAddonRef } from "./refs";
-import { cachedCfId, resolveCfProject, resolveCurseforge } from "./sources/curseforge";
+import {
+  cachedCfId,
+  cfProjectTitle,
+  resolveCfProject,
+  resolveCurseforge,
+} from "./sources/curseforge";
 import { resolveGithub } from "./sources/github";
 import { resolveTukui } from "./sources/tukui";
 import { resolveWago } from "./sources/wago";
@@ -255,13 +260,11 @@ export async function addAddon(
       parsed.ref = project.id;
       note ??= project.title;
     }
-    const entry: Entry = {
-      ...parsed,
-      id: canonicalId(parsed.kind, parsed.ref),
-      ...(note ? { note } : {}),
-    };
-    if (manifest.some((other) => other.id === entry.id))
-      throw new WowaddonError("DUPLICATE", `Addon already in manifest: ${entry.id}`);
+    const id = canonicalId(parsed.kind, parsed.ref);
+    if (manifest.some((other) => other.id === id))
+      throw new WowaddonError("DUPLICATE", `Addon already in manifest: ${id}`);
+    if (parsed.kind === "cf") note ??= await cfProjectTitle(parsed.ref, opts.signal);
+    const entry: Entry = { ...parsed, id, ...(note ? { note } : {}) };
     checkAbort(opts.signal);
     // All or nothing: the manifest gains the entry only once the add has succeeded (installed, a
     // dev link left in place, or --no-install), so a failed add can simply be rerun. A dry run takes
