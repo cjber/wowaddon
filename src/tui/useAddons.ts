@@ -6,7 +6,9 @@ import {
   listRows,
   openContext,
   removeAddon,
+  startBackgroundChecks,
   syncAddons,
+  updateNotice,
 } from "../service";
 import type { Context, Flavor, Listing, Progress, Row } from "../types";
 import { failedResults, initBrowse, loadingResults, PAGE_LIMIT, setResults } from "./browse";
@@ -117,7 +119,18 @@ export class AddonActions {
     } finally {
       this.finishWork(generation);
     }
-    if (generation === this.generation) void this.refreshLatest();
+    if (generation === this.generation) {
+      void this.refreshLatest();
+      if (this.ctx) void this.checkSelf(this.ctx);
+    }
+  }
+
+  // The launch refresh above covers addons; a worker checks for a newer wowaddon.
+  private async checkSelf(ctx: Context) {
+    await startBackgroundChecks(ctx, { addons: false });
+    const notice = await updateNotice(ctx);
+    if (notice)
+      this.update((state) => (state.notice || state.error ? state : setNotice(state, notice)));
   }
 
   async refreshLatest() {

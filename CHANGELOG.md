@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Interactive runs check for updates in the background after their command, never waiting on the
+  network: a detached process resolves each addon's latest release (at most hourly) and the latest
+  wowaddon release (every six hours), backing off from 15 minutes to a day after a failure.
+  `list` now shows `update` and `current` from those cached releases without `--refresh`, and a
+  run ends with a one-line stderr notice when a newer wowaddon exists. `sync`, `add`, `check` and
+  `list --refresh` cache what they resolve too. `WOWADDON_NO_UPDATE_CHECK=1` turns it off.
+
 ## [2.1.3] - 2026-11-02
 
 ### Fixed

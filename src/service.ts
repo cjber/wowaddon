@@ -1,4 +1,5 @@
 import { type AdoptionPlan, planAdoption, type Untracked, untrackedFolders } from "./adopt";
+import { cachedReleases, recordReleases, runBackground } from "./background";
 import { backupWtf } from "./backup";
 import { openContext as openConfiguredContext } from "./config";
 import { categories, discover, type Query, addonInfo as sourceInfo } from "./discover";
@@ -45,6 +46,11 @@ export async function openContext(opts: {
   env?: NodeJS.ProcessEnv;
 }): Promise<Context> {
   return openConfiguredContext(opts);
+}
+export { BACKGROUND_COMMAND, startBackgroundChecks, updateNotice } from "./background";
+// The detached worker's body: the self check, and a full refresh that caches every release.
+export function runBackgroundChecks(ctx: Context, keys: string[]): Promise<void> {
+  return runBackground(ctx, keys, (worker) => listRows(worker, { refresh: true }));
 }
 export function parseRef(input: string): { kind: SourceKind; ref: string } {
   return parseAddonRef(input);
@@ -172,16 +178,19 @@ export async function listRows(
   beginProtectionChecks(ctx);
   const state = await readState(ctx);
   const { manifest, errors } = await entries(ctx, opts.refresh, opts.signal);
+  const cached = opts.refresh ? undefined : await cachedReleases(ctx);
   const rows: Row[] = [];
   for (const entry of await select(ctx, manifest, opts.ids, opts.signal)) {
     checkAbort(opts.signal);
     try {
       if (errors.has(entry.id)) throw errors.get(entry.id);
+      const installed = state.addons[entry.id];
+      const release = cached?.(entry, installed);
       const row = await statusRow(
         ctx,
         entry,
-        state.addons[entry.id],
-        opts.refresh ? () => latest(ctx, entry, opts.signal) : undefined,
+        installed,
+        opts.refresh ? () => latest(ctx, entry, opts.signal) : release && (async () => release),
       );
       rows.push(
         opts.refresh && row.status === "missing"
@@ -192,6 +201,7 @@ export async function listRows(
       rows.push(failure(entry, state, error));
     }
   }
+  if (opts.refresh) await recordReleases(ctx, rows, { complete: !opts.ids?.length });
   return rows;
 }
 async function syncEntry(
@@ -268,7 +278,9 @@ export async function addAddon(
     // the same path and never writes. A manifest write that fails after an install leaves the
     // folders recorded in state, and rerunning the add finds them current and writes the line.
     const save = async (row: Row) => {
-      if (!opts.dryRun) await writeManifest(ctx, [...manifest, entry]);
+      if (opts.dryRun) return row;
+      await writeManifest(ctx, [...manifest, entry]);
+      await recordReleases(ctx, [row], { complete: false });
       return row;
     };
     if (!opts.install) return save(await statusRow(ctx, entry, state.addons[entry.id]));
@@ -344,6 +356,7 @@ export async function syncAddons(
         rows.push(row);
       } else rows.push(await syncEntry(ctx, state, entry, { ...opts, beforeChange }));
     }
+    if (!opts.dryRun) await recordReleases(ctx, rows, { complete: !opts.ids?.length });
     return { rows, backup: await backup?.catch(() => undefined) };
   });
 }
