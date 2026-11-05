@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `info` names the same CurseForge file as `check` and `sync` straight after an upload, instead
   of the previous file until CurseForge refreshes the project's latest files.
+- `adopt` and installs ignore a zero `X-Curse-Project-ID` or `X-WoWI-ID` in a TOC instead of
+  treating it as a project to look up.
 
 ## [2.1.6] - 2026-11-05
 
