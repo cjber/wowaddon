@@ -84,12 +84,15 @@ export async function untrackedFolders(
 }
 
 const tukuiIds: Record<string, string> = { "-1": "tukui", "-2": "elvui" };
+// A packager writes 0 as a placeholder before the addon has a store project, so it is not an ID:
+// resolving it would ask CurseForge or WoWInterface for project 0.
+const isProjectId = (value: string) => /^\d+$/.test(value) && Number(value) > 0;
 function tocRefs(toc: string): { kind: SourceKind; ref: string }[] {
   const refs: { kind: SourceKind; ref: string }[] = [];
   const cf = tocField(toc, "X-Curse-Project-ID");
-  if (cf && /^\d+$/.test(cf)) refs.push({ kind: "cf", ref: cf });
+  if (cf && isProjectId(cf)) refs.push({ kind: "cf", ref: cf });
   const wowi = tocField(toc, "X-WoWI-ID");
-  if (wowi && /^\d+$/.test(wowi)) refs.push({ kind: "wowi", ref: wowi });
+  if (wowi && isProjectId(wowi)) refs.push({ kind: "wowi", ref: wowi });
   const tukui = tocField(toc, "X-Tukui-ProjectID");
   if (tukui && tukuiIds[tukui]) refs.push({ kind: "tukui", ref: tukuiIds[tukui] });
   return refs;
