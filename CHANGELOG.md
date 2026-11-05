@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.6] - 2026-11-05
+
+### Changed
+
+- The terminal UI library moves to 0.8.2, which keeps raw mode on until a suspend settles, so
+  the mouse reports and keys typed while the TUI hands the terminal to `$EDITOR` or suspends
+  with Ctrl+Z are discarded instead of being echoed at the prompt or read by the next program.
+  Wrapped text also keeps its full height in centred and flex-start layouts, so a long body no
+  longer loses rows in a short dialog.
+
 ## [2.1.5] - 2026-11-04
 
 ### Fixed
