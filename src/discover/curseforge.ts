@@ -1,6 +1,6 @@
 import { flavors } from "../flavors";
 import { getCredentials, requestJson } from "../http";
-import { resolveCfProject } from "../sources/curseforge";
+import { resolveCfProject, resolveCurseforge } from "../sources/curseforge";
 import { firstLines, htmlToText } from "../text";
 import {
   type AddonInfo,
@@ -231,7 +231,15 @@ export async function cfInfo(ctx: Context, ref: string, signal?: AbortSignal): P
       throw new WowaddonError("SOURCE_RESPONSE", "Invalid CurseForge project.");
     ({ mod, fileId } = fromWidget(widget, ctx.flavor));
   }
-  const file = mod.latestFiles?.find((candidate) => candidate.id === fileId);
+  let version = mod.latestFiles?.find((candidate) => candidate.id === fileId)?.displayName ?? null;
+  // The project's latestFiles lags a fresh upload, so name the file check and sync would install.
+  try {
+    const newest = await resolveCurseforge(ctx, ref, signal);
+    fileId = Number(newest.versionKey);
+    version = newest.version;
+  } catch (error) {
+    if (error instanceof WowaddonError && error.code === "ABORTED") throw error;
+  }
   const changelog =
     fileId === undefined
       ? null
@@ -242,7 +250,7 @@ export async function cfInfo(ctx: Context, ref: string, signal?: AbortSignal): P
           .then((response) =>
             typeof response.changelogBody === "string"
               ? {
-                  version: file?.displayName ?? null,
+                  version,
                   text: firstLines(htmlToText(response.changelogBody), 2000),
                 }
               : null,
@@ -261,7 +269,7 @@ export async function cfInfo(ctx: Context, ref: string, signal?: AbortSignal): P
   );
   return {
     ...cfListing(mod),
-    version: file?.displayName ?? null,
+    version,
     links,
     folders,
     description: firstLines(description || mod.summary || "", 1500),

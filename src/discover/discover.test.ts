@@ -232,6 +232,35 @@ test("CurseForge info reads the project, its description and this flavor's chang
   expect(info.description).not.toContain("<");
 });
 
+test("CurseForge info names the newest file when the project's latestFiles lags an upload", async () => {
+  const files =
+    "https://www.curseforge.com/api/v1/mods/334372/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true";
+  setFetch(
+    routeFetch({
+      [`${CURSE_TOOLS}/mods/334372`]: mod,
+      [`${CURSE_TOOLS}/mods/334372/description`]: description,
+      [files]: {
+        data: [
+          {
+            id: 9500000,
+            displayName: "v12.5.0",
+            fileName: "Questie-v12.5.0.zip",
+            dateCreated: "2099-01-01T00:00:00Z",
+            gameVersionTypeIds: [88568],
+            gameVersions: [],
+            releaseType: 1,
+          },
+        ],
+        pagination: { totalCount: 1 },
+      },
+      "https://www.curseforge.com/api/v1/mods/334372/files/9500000/change-log": changelog,
+    }).fetch,
+  );
+  const info = await addonInfo(fixture.ctx, "cf:334372");
+  expect(info.version).toBe("v12.5.0");
+  expect(info.changelog?.version).toBe("v12.5.0");
+});
+
 test("CurseForge info falls back to cfwidget when the API mirror is down", async () => {
   setFetch(
     routeFetch({
