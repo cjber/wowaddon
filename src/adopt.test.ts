@@ -162,6 +162,35 @@ test("a dry run matches folders by WowUp record, TOC ID, manifest line and title
   );
 });
 
+test("a zero project ID falls through to the title search", async () => {
+  await addon("OpenMap", "## Title: OpenMap\n## X-Curse-Project-ID: 0\n## X-WoWI-ID: 0");
+  const listing = (id: number, name: string) => ({
+    id,
+    name,
+    slug: name.toLowerCase(),
+    latestFilesIndexes: [
+      { gameVersion: "1.60.1", fileId: id, releaseType: 1, gameVersionTypeId: 88568 },
+    ],
+    latestFiles: [{ id, displayName: "v1", releaseType: 1, modules: [{ name }] }],
+  });
+  const search = (text: string) =>
+    `${CURSE_TOOLS}/mods/search?gameId=1&classId=1&sortField=2&sortOrder=desc&index=0&pageSize=10&searchFilter=${text}&gameVersionTypeId=88568`;
+  const { fetch, calls } = routeFetch({
+    [`${CURSE_TOOLS}/mods/1735937`]: { data: listing(1735937, "OpenMap") },
+    [search("OpenMap")]: { data: [listing(1735937, "OpenMap")] },
+    [`${HUB}/addons/search/forever?query=OpenMap&limit=10`]: { addons: [] },
+    "https://api.tukui.org/v1/addons": [],
+  });
+  setFetch(async (url, init) => {
+    if (url.includes("/description") || url.includes("change-log")) return json({}, 404);
+    return fetch(url, init);
+  });
+  const { plan } = await adoptAddons(fixture.ctx, { dryRun: true, wowup: false });
+  expect(plan.matches.map((m) => [m.entry.id, m.matchedBy])).toEqual([["cf:1735937", "title"]]);
+  // Project 0 is a placeholder, never a lookup: nothing is asked of CurseForge or WoWInterface for it.
+  expect(calls.filter((url) => /\/(mods|addons)\/0(\?|$)/.test(url))).toEqual([]);
+});
+
 test("a manifest line that names the folder wins over a new one", async () => {
   await addon("RXPGuides", "## Title: RestedXP Guides\n## X-Curse-Project-ID: 486246");
   await mkdir(join(fixture.root, "config", "wowaddon"), { recursive: true });
