@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.7] - 2026-11-05
+
 ### Fixed
 
 - `info` names the same CurseForge file as `check` and `sync` straight after an upload, instead
