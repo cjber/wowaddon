@@ -78,6 +78,8 @@ const projectKeys: Partial<Record<Entry["kind"], string>> = {
 };
 const projectIdPattern = (entry: Entry) => {
   const key = projectKeys[entry.kind];
+  // 0 is a packager placeholder, not a project: it must never claim a folder by TOC id.
+  if (key && /^0+$/.test(entry.ref)) return undefined;
   return key ? new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im") : undefined;
 };
 async function tocOf(ctx: Context, folder: string): Promise<string | undefined> {
