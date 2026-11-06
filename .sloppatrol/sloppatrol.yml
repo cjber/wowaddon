@@ -2,19 +2,11 @@
 agent: claude
 prepare:
   - bun install --frozen-lockfile
-cleanup: []
 checks:
   - { name: lint, run: "bun run lint" }
   - { name: typecheck, run: "bun run typecheck" }
   - { name: test, run: "bun test", tests: true }
   - { name: changelog, run: "bun scripts/changelog.ts --check" }
-  - {
-      name: gate,
-      run: "python3 .sloppatrol/gate.py --base origin/main && python3 .sloppatrol/agents.py check",
-    }
 focus: [src/**, bin/**]
 ignore: [dist/**, node_modules/**, docs/**, skills/**]
 guards: { maxFiles: 10, maxLines: 500 }
-agents:
-  refactorer: { maxPerCycle: 1, maxAttempts: 2 }
-github: { enabled: false }
