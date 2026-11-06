@@ -10,3 +10,18 @@ the CLI and the TUI call; `src/types.ts` holds the shared contracts (`Flavor`, `
   markdown too, so a hand-edited doc can fail the gate.
 - Never point a command at a real AddOns folder: use a throwaway `HOME` and `XDG_CONFIG_HOME`.
 - Never use the network.
+
+## Conventions
+
+- Errors cross module boundaries as `WowaddonError(code, message)` (`src/types.ts`); a bare
+  `catch {}` rethrows a `WowaddonError` with a code, or carries a comment saying why it drops it.
+- Network goes through `requestJson` / `requestBytes` in `src/http.ts`; tests swap `fetch` with
+  `setFetch()` and never touch the network.
+- TUI state transitions are pure functions in `src/tui/model.ts`; side effects live in
+  `src/tui/useAddons.ts`.
+- `src/testing/fixtures/` holds recorded public API responses: never edit them in a cleanup.
+
+## Settled
+
+- Comment-only `catch` blocks: anonymous GitHub access when `gh auth token` fails (`src/http.ts`),
+  and the TUI's background refresh keeping the last rows (`src/tui/useAddons.ts`).
