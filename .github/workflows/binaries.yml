@@ -2,6 +2,14 @@ name: Binary checks
 
 on:
   workflow_call:
+    inputs:
+      # CI only needs to prove the binaries build and run; storing 90 MB of them on every
+      # push and pull request exhausts the account's Actions artifact quota, so only the
+      # release path keeps them.
+      upload:
+        description: Store the built binaries as artifacts for the release job
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -36,6 +44,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: bun scripts/smoke-binary.ts "dist/wowaddon-linux-$ARCH"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.upload
         with:
           name: wowaddon-linux-${{ matrix.arch }}
           path: dist/wowaddon-linux-${{ matrix.arch }}
