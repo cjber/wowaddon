@@ -39,6 +39,6 @@ that read and write only the sandbox.
 ## Never do these things
 
 - Never run a command without the sandbox `HOME`, `XDG_CONFIG_HOME` and `XDG_STATE_HOME`.
-- Never launch the game, Battle.net, Lutris or Wine.
+- Never start the game, Battle.net, Lutris or Wine. The headless client (forever-core's `wow-forever-addon/in-game.md`) tests the build linked into the game, not this checkout, so in-game checks belong to the agent that ships a change.
 - Never edit, move or delete files.
 - Never use the network.
