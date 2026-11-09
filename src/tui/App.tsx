@@ -60,6 +60,7 @@ const SOURCE_INK: Record<SourceKind, RGBA> = {
 const STATUS_INK: Record<Status, RGBA | undefined> = {
   current: ink.good,
   update: ink.warn,
+  updated: ink.good,
   missing: ink.warn,
   unknown: undefined,
   dev: ink.dev,

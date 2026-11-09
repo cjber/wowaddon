@@ -87,6 +87,36 @@ async function installRoutes() {
   });
   return calls;
 }
+async function devBuild(version: string, tag: string) {
+  const target = join(fixture.root, "dev-build/Foo");
+  await mkdir(target, { recursive: true });
+  await writeFile(join(target, "Foo.toc"), `## Interface: 16001\n## Version: ${version}\n`);
+  await writeFile(join(target, "marker"), "dev");
+  await symlink(target, join(fixture.ctx.addonsDir, "Foo"));
+  const bytes = await zip({ "Foo/Foo.toc": "## Interface: 16001", "Foo/marker": "new" });
+  setFetch(async (url) => {
+    if (url === "https://api.github.com/repos/a/foo/releases?per_page=100&page=1")
+      return json([
+        {
+          tag_name: tag,
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              id: 1,
+              updated_at: "now",
+              name: "Foo-forever.zip",
+              browser_download_url: "https://github.com/a/foo/asset.zip",
+            },
+          ],
+        },
+      ]);
+    if (url === "https://github.com/a/foo/asset.zip") return new Response(bytes);
+    throw new Error(`Unexpected network request: ${url}`);
+  });
+  await writeFile(manifestPath(fixture.ctx), "gh a/foo\n");
+  return target;
+}
 test("add, local list, unchanged sync, and remove use the service contract", async () => {
   const calls = await installRoutes();
   const progress: Progress[] = [];
@@ -187,6 +217,45 @@ test("check matches an untracked folder by the source's folder list, and a symli
   await mkdir(join(fixture.root, "dev/Questie"), { recursive: true });
   await symlink(join(fixture.root, "dev/Questie"), join(fixture.ctx.addonsDir, "Questie"));
   expect(await checkStatus()).toEqual(["dev"]);
+});
+test("list keeps an unexpired dev build and names what it waits for", async () => {
+  const target = await devBuild("v1.1.0-dev+3fa2c1d", "v1.1.0");
+  expect((await listRows(fixture.ctx, { refresh: true }))[0]).toMatchObject({
+    status: "dev",
+    devTag: "v1.1.0",
+    message: "dev build of v1.1.0, waiting for a newer release",
+  });
+  expect((await syncAddons(fixture.ctx, {})).rows[0]).toMatchObject({
+    status: "dev",
+    devTag: "v1.1.0",
+  });
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(target, "marker"), "utf8")).toBe("dev");
+});
+test("sync replaces an expired dev build and leaves its target untouched", async () => {
+  const target = await devBuild("v1.0.0-dev+3fa2c1d", "v1.1.0");
+  expect((await listRows(fixture.ctx, { refresh: true }))[0]).toMatchObject({
+    status: "update",
+    devTag: "v1.0.0",
+  });
+  const [row] = (await syncAddons(fixture.ctx, {})).rows;
+  expect(row).toMatchObject({
+    status: "updated",
+    devTag: "v1.0.0",
+    installed: { version: "v1.1.0", versionKey: "1:now" },
+  });
+  expect(row.message).toBe("dev build of v1.0.0 replaced by v1.1.0");
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(false);
+  expect(await readFile(join(fixture.ctx.addonsDir, "Foo/marker"), "utf8")).toBe("new");
+  expect(await readFile(join(target, "marker"), "utf8")).toBe("dev");
+  expect(await readFile(join(target, "Foo.toc"), "utf8")).toContain("v1.0.0-dev+3fa2c1d");
+});
+test("sync --dry-run predicts an expired dev build without touching its link", async () => {
+  const target = await devBuild("v1.0.0-dev+3fa2c1d", "v1.1.0");
+  const [row] = (await syncAddons(fixture.ctx, { dryRun: true })).rows;
+  expect(row).toMatchObject({ status: "update", devTag: "v1.0.0" });
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(target, "marker"), "utf8")).toBe("dev");
 });
 test("check downloads only when a folder named like the addon is otherwise undecided", async () => {
   await writeFile(manifestPath(fixture.ctx), "gh a/b  # Foo\n");

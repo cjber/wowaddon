@@ -210,17 +210,24 @@ reports `BACKUP_FAILED` on each addon it would have installed.
 
 ## Dev-link safety
 
-An addon folder that is a symlink, contains `.git`, or sits inside a git worktree is never
-touched: sync skips it and says why, and `remove` stops tracking it (manifest line and
+An addon folder that is a symlink, contains `.git`, or sits inside a git worktree is normally
+never touched: sync skips it and says why, and `remove` stops tracking it (manifest line and
 state entry) while the folder stays as it is. That is how this repo's own addons under active
-development stay live while everything else updates normally. A folder installed outside
-wowaddon is left alone too, unless you pass `--adopt` (or confirm the TUI's take-over
-prompt), after which it will be replaced like any other managed folder.
+development stay live while everything else updates normally. The exception is an expiring dev
+build, described below. A folder installed outside wowaddon is left alone too, unless you pass
+`--adopt` (or confirm the TUI's take-over prompt), after which it will be replaced like any other
+managed folder.
 
 Before an addon is first installed, its dev link is found by name (the GitHub repo name or the
 Tukui or Wago slug, ignoring case and punctuation, so `questie/questietrace` matches
 `QuestieTrace`) or by the CurseForge or WoWInterface project ID in the folder's TOC, and it shows
 as `dev`, not `missing`.
+
+A symlinked dev build whose TOC says `## Version: <tag>-dev+<sha>` expires on its own: once the
+manifest source's latest release is newer than `<tag>`, `sync` removes the symlink (never its
+target) and installs the release, reporting the row as `updated` with the dev tag. Until then it
+stays `dev`, and `list` says which release it is waiting on. A symlink or git checkout without
+that version form is still never touched.
 
 ## Agents and scripting
 
@@ -236,12 +243,13 @@ With `--json` each run prints exactly one JSON document on stdout and keeps prog
 `info` prints `{ addon }` with that plus `version`, `links`, `folders`, `description` and
 `changelog`; `adopt` prints `{ matches, addons, unmatched, skipped, backup }`.
 
-A row is `{ entry, installed?, latest?, status, message?, code? }`, where `status` is one of
-`missing`, `update`, `current`, `unknown`, `dev`, `unmanaged` or `error`, and `code` is the typed
-error code on a failed row. A failed command prints `{ schemaVersion, command, error: { code,
-message } }` instead. `wowaddon schema` describes every command, flag, output shape, status, error
-code and exit code. The agent skill at [`skills/wowaddon/SKILL.md`](skills/wowaddon/SKILL.md)
-says how an agent should drive it.
+A row is `{ entry, installed?, latest?, status, message?, code?, devTag? }`, where `status` is one
+of `missing`, `update`, `updated`, `current`, `unknown`, `dev`, `unmanaged` or `error`, `code` is
+the typed error code on a failed row, and `devTag` is the release tag a dev build was built from.
+A failed command prints `{ schemaVersion, command, error: { code, message } }` instead.
+`wowaddon schema` describes every command, flag, output shape, status, error code and exit code.
+The agent skill at [`skills/wowaddon/SKILL.md`](skills/wowaddon/SKILL.md) says how an agent
+should drive it.
 
 ## Development
 

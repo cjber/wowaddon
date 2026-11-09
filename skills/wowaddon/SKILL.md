@@ -43,8 +43,10 @@ once the user agrees. `check` lists folders still `untracked`. Add an unmatched 
 
 Safety rules:
 
-- A `dev` row is a symlink, git checkout or worktree under development. wowaddon never touches
-  it, and neither do you: no deleting, replacing or editing those folders by hand.
+- A `dev` row is a symlink, git checkout or worktree under development. wowaddon leaves it
+  alone, except a symlinked build whose TOC names `<tag>-dev+<sha>`: once a newer release exists,
+  `sync` replaces the link (never its target) and reports `updated`. Neither do you delete,
+  replace or edit those folders by hand.
 - `unmanaged` means a folder installed outside wowaddon. Pass `--adopt` only after the user
   agrees it may be replaced.
 - Keep `--no-backup` for when the user asks for it; the snapshot protects their SavedVariables.

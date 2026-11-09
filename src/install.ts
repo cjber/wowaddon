@@ -6,7 +6,7 @@ import { checkAbort, getCredentials, requestBytes } from "./http";
 import { acquireLock, releaseLock } from "./lock";
 import { downloadCurseforge } from "./sources/curseforge";
 import { atomicWrite, readState, type State, safeFolder, validateState, writeState } from "./state";
-import { tocMatchesFolder } from "./toc";
+import { devBuildTag, releaseSupersedesDevBuild, tocMatchesFolder } from "./toc";
 import {
   type Context,
   type Entry,
@@ -46,19 +46,27 @@ async function containsGit(path: string): Promise<boolean> {
   }
   return false;
 }
-export async function protectedFolder(ctx: Context, folder: string): Promise<boolean> {
+interface FolderProtection {
+  symlink: boolean;
+  other: boolean;
+}
+async function folderProtection(ctx: Context, folder: string): Promise<FolderProtection> {
   if (!safeFolder(folder))
     throw new WowaddonError("STATE_CORRUPT", "Unsafe addon folder in state.");
   const target = join(ctx.addonsDir, folder);
   const targetInfo = await info(target);
-  if (targetInfo?.isSymbolicLink()) return true;
-  if (targetInfo?.isDirectory() && (await containsGit(target))) return true;
+  const symlink = !!targetInfo?.isSymbolicLink();
+  const git = !!targetInfo?.isDirectory() && (await containsGit(target));
   let ancestor = ancestorProtection.get(ctx);
   if (!ancestor) {
     ancestor = insideWorktree(ctx);
     ancestorProtection.set(ctx, ancestor);
   }
-  return ancestor;
+  return { symlink, other: git || (await ancestor) };
+}
+export async function protectedFolder(ctx: Context, folder: string): Promise<boolean> {
+  const protection = await folderProtection(ctx, folder);
+  return protection.symlink || protection.other;
 }
 const ancestorProtection = new WeakMap<Context, Promise<boolean>>();
 export function beginProtectionChecks(ctx: Context): void {
@@ -139,14 +147,61 @@ export async function foreignFolders(
   }
   return found;
 }
+export interface DevLink {
+  folder: string;
+  tag: string;
+}
+export interface Protection {
+  protected: boolean;
+  // A symlinked dev build whose TOC names the release it was built from.
+  dev?: DevLink;
+  // Protected for a reason that cannot expire, such as a git checkout or worktree.
+  blocked: boolean;
+}
+async function devLinkIn(ctx: Context, folder: string): Promise<DevLink | undefined> {
+  const target = await info(join(ctx.addonsDir, folder));
+  if (!target?.isSymbolicLink()) return undefined;
+  const tag = devBuildTag((await tocOf(ctx, folder)) ?? "");
+  return tag ? { folder, tag } : undefined;
+}
+export async function protection(
+  ctx: Context,
+  entry: Entry,
+  installed?: Installed,
+): Promise<Protection> {
+  if (!installed) {
+    const folder = await devFolderFor(ctx, entry);
+    if (!folder) return { protected: false, blocked: false };
+    const state = await folderProtection(ctx, folder);
+    const dev = state.symlink ? await devLinkIn(ctx, folder) : undefined;
+    return {
+      protected: state.symlink || state.other,
+      blocked: state.other || !dev,
+      ...(dev ? { dev } : {}),
+    };
+  }
+  let guarded = false;
+  let blocked = false;
+  let dev: DevLink | undefined;
+  for (const folder of installed.folders) {
+    const state = await folderProtection(ctx, folder);
+    if (!state.symlink && !state.other) continue;
+    guarded = true;
+    if (state.other) blocked = true;
+    if (state.symlink) {
+      const found = await devLinkIn(ctx, folder);
+      if (found) dev ??= found;
+      else blocked = true;
+    }
+  }
+  return { protected: guarded, blocked, ...(dev ? { dev } : {}) };
+}
 export async function isProtected(
   ctx: Context,
   entry: Entry,
   installed?: Installed,
 ): Promise<boolean> {
-  if (!installed) return (await devFolderFor(ctx, entry)) !== undefined;
-  for (const folder of installed.folders) if (await protectedFolder(ctx, folder)) return true;
-  return false;
+  return (await protection(ctx, entry, installed)).protected;
 }
 export async function foldersPresent(ctx: Context, installed: Installed): Promise<boolean> {
   for (const folder of installed.folders)
@@ -260,6 +315,9 @@ export async function recoverPending(ctx: Context): Promise<void> {
 }
 export const DEV_SKIPPED =
   "dev link, skipped: to install a release here, remove the symlink or checkout, then run sync";
+export const devWaiting = (tag: string) => `dev build of ${tag}, waiting for a newer release`;
+export const devReplaced = (tag: string, version: string) =>
+  `dev build of ${tag} replaced by ${version}`;
 export interface InstallOptions {
   adopt?: boolean;
   // Stops once the download is read and the folders are checked: the row says what a real run would do.
@@ -269,6 +327,12 @@ export interface InstallOptions {
   // Runs after the download is read, just before the AddOns folder changes.
   beforeChange?: () => Promise<void>;
   rename?: typeof rename;
+  // An expired dev link this install may replace; its target is never touched.
+  replaceDev?: DevLink;
+}
+async function replacement(ctx: Context, replaceDev: DevLink | undefined, folder: string) {
+  if (replaceDev?.folder !== folder) return false;
+  return (await devLinkIn(ctx, folder))?.tag === replaceDev.tag;
 }
 async function preflight(
   ctx: Context,
@@ -276,9 +340,12 @@ async function preflight(
   id: string,
   folders: string[],
   adopt: boolean,
+  replaceDev?: DevLink,
 ): Promise<boolean> {
   await assertRoot(ctx);
-  for (const folder of folders) if (await protectedFolder(ctx, folder)) return false;
+  for (const folder of folders)
+    if (!(await replacement(ctx, replaceDev, folder)) && (await protectedFolder(ctx, folder)))
+      return false;
   const existing = new Map(
     (await readdir(ctx.addonsDir)).map((folder) => [folder.toLowerCase(), folder]),
   );
@@ -297,9 +364,10 @@ async function preflight(
         `${folder} collides with existing folder ${actual}.`,
       );
     const target = await info(join(ctx.addonsDir, folder));
-    if (target && !target.isDirectory())
+    const replace = await replacement(ctx, replaceDev, folder);
+    if (target && !replace && !target.isDirectory())
       throw new WowaddonError("FOLDER_COLLISION", `${folder} is not an addon directory.`);
-    if (target && !state.addons[id]?.folders.includes(folder) && !adopt)
+    if (target && !replace && !state.addons[id]?.folders.includes(folder) && !adopt)
       throw new WowaddonError(
         "UNMANAGED",
         `${folder} is already installed outside wowaddon. Use --adopt to take it over.`,
@@ -328,7 +396,7 @@ async function transact(
       "An interrupted transaction still needs recovery; its backups have been preserved.",
     );
   const folders = installFolders(state, id, archive.folders);
-  if (!(await preflight(ctx, state, id, folders, !!opts.adopt))) return false;
+  if (!(await preflight(ctx, state, id, folders, !!opts.adopt, opts.replaceDev))) return false;
   checkAbort(opts.signal);
   const txDir = join(dirname(ctx.addonsDir), `.wowaddon-${crypto.randomUUID()}`);
   await mkdir(txDir, { mode: 0o700 });
@@ -342,7 +410,7 @@ async function transact(
       await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, bytes, { mode: 0o644 });
     }
-    if (!(await preflight(ctx, state, id, folders, !!opts.adopt))) return false;
+    if (!(await preflight(ctx, state, id, folders, !!opts.adopt, opts.replaceDev))) return false;
     const pending: Pending = {
       schema: 1,
       addonsDir: ctx.addonsDir,
@@ -362,7 +430,7 @@ async function transact(
     try {
       for (const operation of pending.operations) {
         checkAbort(opts.signal);
-        if (!(await preflight(ctx, state, id, [operation.folder], !!opts.adopt)))
+        if (!(await preflight(ctx, state, id, [operation.folder], !!opts.adopt, opts.replaceDev)))
           throw new WowaddonError("DEV_PROTECTED", DEV_SKIPPED);
         if (operation.hadOld)
           await (opts.rename ?? rename)(
@@ -415,13 +483,24 @@ export async function installAddon(
   const progress = (phase: Progress["phase"], message?: string) =>
     opts.onProgress?.({ id: entry.id, phase, message });
   checkAbort(opts.signal);
+  const guard = await protection(ctx, entry, installed);
+  const dev = guard.dev && !guard.blocked ? guard.dev : undefined;
+  const replace = dev && releaseSupersedesDevBuild(release.version, dev.tag) ? dev : undefined;
   const skipDev = (): Row => {
-    progress("skipped", DEV_SKIPPED);
-    return { entry, installed, latest: release, status: "dev", message: DEV_SKIPPED };
+    const message = dev ? devWaiting(dev.tag) : DEV_SKIPPED;
+    progress("skipped", message);
+    return {
+      entry,
+      installed,
+      latest: release,
+      status: "dev",
+      message,
+      ...(dev ? { devTag: dev.tag } : {}),
+    };
   };
-  if (await isProtected(ctx, entry, installed)) return skipDev();
+  if (guard.protected && !replace) return skipDev();
   const present = !!installed && (await foldersPresent(ctx, installed));
-  if (present && installed?.versionKey === release.versionKey) {
+  if (present && !replace && installed?.versionKey === release.versionKey) {
     progress("skipped", "up to date");
     return { entry, installed, latest: release, status: "current", message: "up to date" };
   }
@@ -440,13 +519,14 @@ export async function installAddon(
   });
   if (opts.dryRun) {
     const folders = installFolders(state, entry.id, archive.folders);
-    if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt))) return skipDev();
+    if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt, replace))) return skipDev();
     return {
       entry,
       installed,
       latest: release,
-      status: present ? "update" : "missing",
-      message: release.note,
+      status: replace || present ? "update" : "missing",
+      message: replace ? devReplaced(replace.tag, release.version) : release.note,
+      ...(replace ? { devTag: replace.tag } : {}),
     };
   }
   await opts.beforeChange?.();
@@ -457,9 +537,18 @@ export async function installAddon(
     folders: archive.folders,
     installedAt: new Date().toISOString(),
   };
-  if (!(await transact(ctx, state, entry.id, archive, next, opts))) return skipDev();
-  progress("done", release.note);
-  return { entry, installed: next, latest: release, status: "current", message: release.note };
+  if (!(await transact(ctx, state, entry.id, archive, next, { ...opts, replaceDev: replace })))
+    return skipDev();
+  const message = replace ? devReplaced(replace.tag, release.version) : release.note;
+  progress("done", message);
+  return {
+    entry,
+    installed: next,
+    latest: release,
+    status: replace ? "updated" : "current",
+    message,
+    ...(replace ? { devTag: replace.tag } : {}),
+  };
 }
 export async function removeInstalled(
   ctx: Context,
