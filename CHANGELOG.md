@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- An expiring dev build: a symlinked AddOns folder whose TOC says
+  `## Version: <tag>-dev+<sha>` is replaced by the release once the manifest source has a newer
+  release than `<tag>`. `sync` removes only the symlink and installs the release, reporting the row
+  as `updated` with the dev tag; until then it stays `dev` and `list` says which release it waits
+  for. A symlink or checkout without that version form is untouched as before. Rows carry
+  `devTag` in JSON.
+
 ## [2.1.7] - 2026-11-05
 
 ### Fixed

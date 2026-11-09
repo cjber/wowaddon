@@ -194,6 +194,7 @@ function phaseLabel(progress: Progress): string {
 const STATUS_WORDS: Record<Row["status"], string> = {
   current: "up to date",
   update: "update available",
+  updated: "updated",
   missing: "not installed",
   unknown: "",
   dev: "dev link",

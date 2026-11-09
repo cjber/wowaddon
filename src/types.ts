@@ -19,7 +19,15 @@ export interface Release {
   archive: "package" | "source";
   note?: string;
 }
-export type Status = "missing" | "current" | "update" | "unknown" | "dev" | "unmanaged" | "error";
+export type Status =
+  | "missing"
+  | "current"
+  | "update"
+  | "updated"
+  | "unknown"
+  | "dev"
+  | "unmanaged"
+  | "error";
 export interface Row {
   entry: Entry;
   installed?: Installed;
@@ -27,6 +35,8 @@ export interface Row {
   status: Status;
   message?: string;
   code?: string;
+  // The release tag a dev build's `## Version: <tag>-dev+<sha>` was built from.
+  devTag?: string;
 }
 export type Phase = "resolving" | "downloading" | "installing" | "done" | "skipped" | "failed";
 export interface Progress {

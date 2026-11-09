@@ -204,10 +204,11 @@ Exit codes: ${Object.entries(exitCodes)
 const statuses: Record<Row["status"], string> = {
   missing: "not installed; sync installs it",
   update: "installed, and a newer release exists; sync updates it",
+  updated: "a dev build replaced by its latest release",
   current: "installed at the latest release",
   unknown:
     "installed; no recent release cached since it was installed (list --refresh resolves it)",
-  dev: "a dev link (symlink, git checkout or worktree); never touched",
+  dev: "a dev link (symlink, git checkout or worktree); a symlinked dev build is replaced once a newer release exists",
   unmanaged:
     "its folder exists but was installed outside wowaddon; rerun the sync or add with --adopt",
   error: "failed; message and code say why",
@@ -249,7 +250,7 @@ function schema() {
     output: {
       envelope:
         "{ schemaVersion: number, command: string, flavor: 'era' | 'forever', addonsDir: string }",
-      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note? }, status, message?, code? }",
+      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note? }, status, message?, code?, devTag?: string (the release tag a dev build is based on) }",
       error:
         "{ schemaVersion, command, error: { code: string, message: string } } on stdout, with a non-zero exit",
       Listing:

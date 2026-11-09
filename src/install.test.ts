@@ -65,6 +65,17 @@ async function download(folders = ["Foo"]) {
   });
   return () => calls;
 }
+async function devLink(name: string, version?: string) {
+  const development = join(fixture.root, `dev-${name}`);
+  await mkdir(development, { recursive: true });
+  await writeFile(join(development, "marker"), "dev");
+  await writeFile(
+    join(development, `${name}.toc`),
+    `## Interface: 16001${version ? `\n## Version: ${version}` : ""}\n`,
+  );
+  await symlink(development, join(fixture.ctx.addonsDir, name));
+  return development;
+}
 async function contents(name: string) {
   return readFile(join(fixture.ctx.addonsDir, name, "marker"), "utf8");
 }
@@ -106,6 +117,67 @@ for (const kind of ["symlink", "broken", "git-dir", "git-file"] as const)
       expect((await lstat(target)).isSymbolicLink()).toBe(true);
     else expect(await contents("Foo")).toBe("old");
   });
+test("an expired dev build is replaced through its symlink and leaves its target intact", async () => {
+  const development = await devLink("Foo", "v1.0.0-dev+3fa2c1d");
+  await own();
+  const calls = await download();
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+  );
+  expect(row).toMatchObject({
+    status: "updated",
+    devTag: "v1.0.0",
+    installed: { version: "v1.1.0", versionKey: "2" },
+  });
+  expect(row.message).toContain("dev build of v1.0.0");
+  expect(calls()).toBe(1);
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(false);
+  expect(await contents("Foo")).toBe("new");
+  expect(await readFile(join(development, "marker"), "utf8")).toBe("dev");
+  expect(await readFile(join(development, "Foo.toc"), "utf8")).toContain("v1.0.0-dev+3fa2c1d");
+});
+test("an unexpired dev build stays a dev link with its tag", async () => {
+  const development = await devLink("Foo", "v1.1.0-dev+3fa2c1d");
+  await own();
+  const calls = await download();
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+  );
+  expect(row).toMatchObject({ status: "dev", devTag: "v1.1.0" });
+  expect(row.message).toBe("dev build of v1.1.0, waiting for a newer release");
+  expect(calls()).toBe(0);
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(development, "marker"), "utf8")).toBe("dev");
+});
+test("a plain symlink is still skipped untouched", async () => {
+  const development = await devLink("Foo");
+  await own();
+  const calls = await download();
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+  );
+  expect(row.status).toBe("dev");
+  expect(row.message).toBe(DEV_SKIPPED);
+  expect(row.devTag).toBeUndefined();
+  expect(calls()).toBe(0);
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(development, "marker"), "utf8")).toBe("dev");
+});
+test("a git checkout with a dev version is still never touched", async () => {
+  const path = await folder("Foo");
+  await mkdir(join(path, ".git"));
+  await writeFile(join(path, "Foo.toc"), "## Interface: 16001\n## Version: v1.0.0-dev+3fa2c1d\n");
+  await own();
+  const calls = await download();
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+  );
+  expect(row.status).toBe("dev");
+  expect(row.message).toBe(DEV_SKIPPED);
+  expect(calls()).toBe(0);
+  expect(await contents("Foo")).toBe("old");
+  expect((await readdir(path)).sort()).toEqual([".git", "Foo.toc", "marker"]);
+});
 test("unknown protected folder skips whole multi-folder addon after validation", async () => {
   const path = await folder("Foo");
   await mkdir(join(path, ".git"));

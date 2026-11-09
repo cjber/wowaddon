@@ -7,12 +7,15 @@ import { checkAbort } from "./http";
 import {
   beginProtectionChecks,
   DEV_SKIPPED,
+  devReplaced,
+  devWaiting,
   foldersFree,
   foldersPresent,
   foreignFolders,
   type InstallOptions,
   installAddon,
   isProtected,
+  protection,
   removeInstalled,
   withInstallLock,
 } from "./install";
@@ -29,6 +32,7 @@ import { resolveTukui } from "./sources/tukui";
 import { resolveWago } from "./sources/wago";
 import { resolveWowinterface } from "./sources/wowinterface";
 import { readState, type State } from "./state";
+import { releaseSupersedesDevBuild } from "./toc";
 import {
   type AddonInfo,
   type Category,
@@ -103,11 +107,35 @@ async function statusRow(
   installed: Installed | undefined,
   release?: () => Promise<Release>,
 ): Promise<Row> {
-  if (await isProtected(ctx, entry, installed))
-    return { entry, installed, status: "dev", message: DEV_SKIPPED };
+  const guard = await protection(ctx, entry, installed);
+  const dev = guard.dev && !guard.blocked ? guard.dev : undefined;
+  if (guard.protected && !dev) return { entry, installed, status: "dev", message: DEV_SKIPPED };
   const present = installed && (await foldersPresent(ctx, installed));
-  if (!release) return { entry, installed, status: present ? "unknown" : "missing" };
+  if (!release) {
+    if (dev)
+      return { entry, installed, status: "dev", message: devWaiting(dev.tag), devTag: dev.tag };
+    return { entry, installed, status: present ? "unknown" : "missing" };
+  }
   const resolved = await release();
+  if (dev) {
+    if (releaseSupersedesDevBuild(resolved.version, dev.tag))
+      return {
+        entry,
+        installed,
+        latest: resolved,
+        status: "update",
+        message: devReplaced(dev.tag, resolved.version),
+        devTag: dev.tag,
+      };
+    return {
+      entry,
+      installed,
+      latest: resolved,
+      status: "dev",
+      message: devWaiting(dev.tag),
+      devTag: dev.tag,
+    };
+  }
   return {
     entry,
     installed,
@@ -219,18 +247,21 @@ async function syncEntry(
 ): Promise<Row> {
   try {
     checkAbort(opts.signal);
-    if (await isProtected(ctx, entry, state.addons[entry.id])) {
+    const installed = state.addons[entry.id];
+    const guard = await protection(ctx, entry, installed);
+    const dev = guard.dev && !guard.blocked ? guard.dev : undefined;
+    if (guard.protected && !dev) {
       opts.onProgress?.({ id: entry.id, phase: "skipped", message: DEV_SKIPPED });
-      return { entry, installed: state.addons[entry.id], status: "dev", message: DEV_SKIPPED };
+      return { entry, installed, status: "dev", message: DEV_SKIPPED };
     }
     opts.onProgress?.({ id: entry.id, phase: "resolving" });
-    return await installAddon(
-      ctx,
-      state,
-      entry,
-      release ?? (await latest(ctx, entry, opts.signal)),
-      opts,
-    );
+    const resolved = release ?? (await latest(ctx, entry, opts.signal));
+    if (dev && !releaseSupersedesDevBuild(resolved.version, dev.tag)) {
+      const message = devWaiting(dev.tag);
+      opts.onProgress?.({ id: entry.id, phase: "skipped", message });
+      return { entry, installed, latest: resolved, status: "dev", message, devTag: dev.tag };
+    }
+    return await installAddon(ctx, state, entry, resolved, opts);
   } catch (error) {
     const row = failure(entry, state, error);
     opts.onProgress?.({ id: entry.id, phase: "failed", message: row.message });
@@ -294,7 +325,9 @@ export async function addAddon(
       return row;
     }
     const row = await syncEntry(ctx, state, entry, opts, release);
-    return row.status === "current" || row.status === "dev" ? save(row) : row;
+    return row.status === "current" || row.status === "dev" || row.status === "updated"
+      ? save(row)
+      : row;
   });
 }
 async function findId(
