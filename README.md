@@ -76,6 +76,12 @@ that neither settles is checked by downloading the release, as `sync --dry-run` 
 an untracked folder named unlike the addon that the source does not list, nor a new folder that an
 update to an installed addon adds; `sync --dry-run` finds both.
 
+Some addons bundle the same library folder (`ForeverCore`, Ace3, LibStub and other embedded shared
+addons). A folder several installed addons ship is shared: each of them installs and updates, the
+copy with the newest TOC `## Version` stays on disk, and the folder is removed only when the last
+addon that ships it is removed. `check` and `list` name the other owners, and their JSON rows carry
+them as `sharedFolders`.
+
 An interactive run (stderr is a terminal) checks for updates in the background once its command
 has finished: a detached process asks GitHub for the latest wowaddon release and resolves each
 addon's latest release, and the next run reads what it found. So `list` shows `update` and
@@ -199,7 +205,7 @@ State lives under `${XDG_CONFIG_HOME:-~/.config}/wowaddon/`:
 
 - `config.json` (optional): `{ "defaultFlavor": "era", "addonsDir": { "era": "...", "forever": "..." }, "backupKeep": 5 }`
 - `era.txt` / `forever.txt`: one `kind ref  # note` per line (see `addons.example.txt`)
-- `state/<flavor>.json`: installed versions and owned folders, written atomically
+- `state/<flavor>.json`: installed versions and owned folders (several addons may own one shared folder), written atomically
 - `cache/cf-slugs.json`: CurseForge slug-to-id cache
 - `cache/wowi-filelist.json`: WoWInterface file list for search, refreshed after six hours
 - `cache/releases-<flavor>.json`: each addon's latest release and when it was fetched
@@ -260,9 +266,10 @@ With `--json` each run prints exactly one JSON document on stdout and keeps prog
 CurseForge key was rejected: `{ source: 'curseforge', status: 401 | 403, file, message }`, where
 `file` names the `cf_token` file to replace.
 
-A row is `{ entry, installed?, latest?, status, message?, code?, devTag? }`, where `status` is one
-of `missing`, `update`, `updated`, `current`, `unknown`, `dev`, `unmanaged` or `error`, `code` is
-the typed error code on a failed row, and `devTag` is the release tag a dev build was built from.
+A row is `{ entry, installed?, latest?, status, message?, code?, devTag?, sharedFolders? }`, where
+`status` is one of `missing`, `update`, `updated`, `current`, `unknown`, `dev`, `unmanaged` or
+`error`, `code` is the typed error code on a failed row, `devTag` is the release tag a dev build was
+built from, and `sharedFolders` lists a shared folder with every addon that owns it.
 A failed command prints `{ schemaVersion, command, error: { code, message } }` instead.
 `wowaddon schema` describes every command, flag, output shape, status, error code and exit code.
 The agent skill at [`skills/wowaddon/SKILL.md`](skills/wowaddon/SKILL.md) says how an agent

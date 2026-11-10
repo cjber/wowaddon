@@ -30,6 +30,11 @@ client.
    like any other addon.
 4. Report `backup` from the sync output: the WTF snapshot taken before the first change.
 
+Several addons can bundle the same folder, such as `ForeverCore`, Ace3 or LibStub. wowaddon treats
+it as shared: each addon installs and updates, the copy with the newest TOC `## Version` stays on
+disk, and `remove` deletes it only when the last addon that ships it is removed. Rows from `check`
+and `list` name the other owners in `sharedFolders`; keep such a folder as it is.
+
 On exit code 1, report each failed row's `code` and `message`. On 2, fix the command or ask for
 the AddOns folder (`CONFIG_MISSING`, `CONFIG_AMBIGUOUS`: pass `--addons-dir`). On 3, another run
 holds the lock, so wait and retry. 130 means the user cancelled.

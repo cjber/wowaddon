@@ -31,10 +31,27 @@ export function devBuildTag(content: string): string | undefined {
 // tag `v1.1.1`), and main is linear, so a release whose x.y.z is above the dev build's tag contains
 // every commit the build was cut from.
 const releaseCore = /^v?(\d+)\.(\d+)\.(\d+)(?:-[a-z]+)?$/i;
-export function releaseSupersedesDevBuild(releaseVersion: string, devTag: string): boolean {
-  const a = releaseCore.exec(releaseVersion.trim());
-  const b = releaseCore.exec(devTag.trim());
+function releaseVersion(text: string): [number, number, number] | undefined {
+  const match = releaseCore.exec(text.trim());
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+}
+export function releaseSupersedesDevBuild(releaseVersionText: string, devTag: string): boolean {
+  const a = releaseVersion(releaseVersionText);
+  const b = releaseVersion(devTag);
   if (!a || !b) return false;
-  for (let i = 1; i <= 3; i++) if (a[i] !== b[i]) return Number(a[i]) > Number(b[i]);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
   return false;
+}
+// A shared folder keeps the newest TOC version on disk. When either version is not a plain x.y.z
+// (some libraries carry none at all), there is no ordering to compare, so the incoming copy wins
+// rather than leaving the folder stuck on its first installation.
+export function releaseVersionAtLeast(candidate: string, current: string): boolean {
+  const a = releaseVersion(candidate);
+  const b = releaseVersion(current);
+  if (!a || !b) return true;
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
+}
+export function tocVersion(content: string): string | undefined {
+  return /^\s*##\s*Version\s*:\s*(.+?)\s*$/im.exec(content)?.[1];
 }

@@ -51,6 +51,8 @@ export interface Row {
   dependencies?: Row[];
   // Required CurseForge dependencies neither tracked nor installed, for `check`.
   missingDependencies?: string[];
+  // Folders this addon ships that another installed addon also lists.
+  sharedFolders?: { folder: string; owners: string[] }[];
 }
 export type Phase = "resolving" | "downloading" | "installing" | "done" | "skipped" | "failed";
 export interface Progress {

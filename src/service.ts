@@ -287,6 +287,22 @@ async function knownFolders(ctx: Context, entry: Entry, signal?: AbortSignal): P
     return [];
   }
 }
+// The folders this addon shares with another installed addon, and every owner of each.
+function sharedFolders(
+  state: State,
+  folders: string[] | undefined,
+): NonNullable<Row["sharedFolders"]> {
+  const shared: NonNullable<Row["sharedFolders"]> = [];
+  for (const folder of folders ?? []) {
+    const owners = Object.entries(state.addons)
+      .filter(([, installed]) =>
+        installed.folders.some((name) => name.toLowerCase() === folder.toLowerCase()),
+      )
+      .map(([owner]) => owner);
+    if (owners.length > 1) shared.push({ folder, owners });
+  }
+  return shared;
+}
 // With refresh, each row's status is what sync would do: install a missing addon, update an
 // outdated one, skip a dev link, stop at an unmanaged folder or leave a current one alone. Nothing
 // is written but the CurseForge name cache.
@@ -318,6 +334,8 @@ export async function listRows(
           : row;
       const missing = missingRequirements(finalRow.latest, manifest, state);
       if (missing.length) finalRow.missingDependencies = missing;
+      const shared = sharedFolders(state, finalRow.installed?.folders);
+      if (shared.length) finalRow.sharedFolders = shared;
       rows.push(finalRow);
     } catch (error) {
       rows.push(failure(entry, state, error));

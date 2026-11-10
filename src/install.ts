@@ -6,7 +6,13 @@ import { checkAbort, getCredentials, requestBytes } from "./http";
 import { acquireLock, releaseLock } from "./lock";
 import { downloadCurseforge } from "./sources/curseforge";
 import { atomicWrite, readState, type State, safeFolder, validateState, writeState } from "./state";
-import { devBuildTag, releaseSupersedesDevBuild, tocMatchesFolder } from "./toc";
+import {
+  devBuildTag,
+  releaseSupersedesDevBuild,
+  releaseVersionAtLeast,
+  tocMatchesFolder,
+  tocVersion,
+} from "./toc";
 import {
   type Context,
   type Entry,
@@ -356,15 +362,48 @@ async function replacement(ctx: Context, replaceDev: DevLink | undefined, folder
   if (replaceDev?.folder !== folder) return false;
   return (await devLinkIn(ctx, folder))?.tag === replaceDev.tag;
 }
+function otherOwners(state: State, id: string, folder: string): string[] {
+  const name = folder.toLowerCase();
+  return Object.entries(state.addons)
+    .filter(
+      ([owner, installed]) =>
+        owner !== id && installed.folders.some((listed) => listed.toLowerCase() === name),
+    )
+    .map(([owner]) => owner);
+}
+function archiveTocVersion(archive: Archive, folder: string): string | undefined {
+  const name = folder.toLowerCase();
+  for (const [path, data] of archive.files) {
+    const [top, file, ...rest] = path.split("/");
+    if (rest.length === 0 && top.toLowerCase() === name && tocMatchesFolder(file, top))
+      return tocVersion(new TextDecoder().decode(data));
+  }
+  return undefined;
+}
+// A shared folder is replaced only when the incoming copy is at least as new as the one on disk.
+async function sharedCopyWins(
+  ctx: Context,
+  archive: Archive,
+  folder: string,
+  shared: boolean,
+): Promise<boolean> {
+  if (!shared) return true;
+  const incoming = archiveTocVersion(archive, folder);
+  const current = tocVersion((await tocOf(ctx, folder)) ?? "");
+  if (!incoming || !current) return true;
+  return releaseVersionAtLeast(incoming, current);
+}
 async function preflight(
   ctx: Context,
   state: State,
   id: string,
   folders: string[],
+  incoming: string[],
   adopt: boolean,
   replaceDev?: DevLink,
 ): Promise<boolean> {
   await assertRoot(ctx);
+  const incomingSet = new Set(incoming.map((folder) => folder.toLowerCase()));
   for (const folder of folders)
     if (!(await replacement(ctx, replaceDev, folder)) && (await protectedFolder(ctx, folder)))
       return false;
@@ -372,13 +411,10 @@ async function preflight(
     (await readdir(ctx.addonsDir)).map((folder) => [folder.toLowerCase(), folder]),
   );
   for (const folder of folders) {
-    for (const [owner, installed] of Object.entries(state.addons)) {
-      if (
-        owner !== id &&
-        installed.folders.some((name) => name.toLowerCase() === folder.toLowerCase())
-      )
-        throw new WowaddonError("OWNED_BY_OTHER", `${folder} is owned by ${owner}.`);
-    }
+    const ships = incomingSet.has(folder.toLowerCase());
+    // A folder another addon owns is shared when this archive ships it too; no write is planned
+    // when it does not, so the other owner keeps it.
+    const shared = ships && otherOwners(state, id, folder).length > 0;
     const actual = existing.get(folder.toLowerCase());
     if (actual && actual !== folder)
       throw new WowaddonError(
@@ -389,7 +425,7 @@ async function preflight(
     const replace = await replacement(ctx, replaceDev, folder);
     if (target && !replace && !target.isDirectory())
       throw new WowaddonError("FOLDER_COLLISION", `${folder} is not an addon directory.`);
-    if (target && !replace && !state.addons[id]?.folders.includes(folder) && !adopt)
+    if (target && !replace && !state.addons[id]?.folders.includes(folder) && !shared && !adopt)
       throw new WowaddonError(
         "UNMANAGED",
         `${folder} is already installed outside wowaddon. Use --adopt to take it over.`,
@@ -403,7 +439,7 @@ const installFolders = (state: State, id: string, folders: string[]) => [
 // What sync would say about installing id into these folders, short of the download: false for a
 // dev link, an UNMANAGED or other folder error thrown, true when nothing is in the way.
 export const foldersFree = (ctx: Context, state: State, id: string, folders: string[]) =>
-  preflight(ctx, state, id, installFolders(state, id, folders), false);
+  preflight(ctx, state, id, installFolders(state, id, folders), folders, false);
 async function transact(
   ctx: Context,
   state: State,
@@ -418,7 +454,8 @@ async function transact(
       "An interrupted transaction still needs recovery; its backups have been preserved.",
     );
   const folders = installFolders(state, id, archive.folders);
-  if (!(await preflight(ctx, state, id, folders, !!opts.adopt, opts.replaceDev))) return false;
+  if (!(await preflight(ctx, state, id, folders, archive.folders, !!opts.adopt, opts.replaceDev)))
+    return false;
   checkAbort(opts.signal);
   const txDir = join(dirname(ctx.addonsDir), `.wowaddon-${crypto.randomUUID()}`);
   await mkdir(txDir, { mode: 0o700 });
@@ -432,7 +469,8 @@ async function transact(
       await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, bytes, { mode: 0o644 });
     }
-    if (!(await preflight(ctx, state, id, folders, !!opts.adopt, opts.replaceDev))) return false;
+    if (!(await preflight(ctx, state, id, folders, archive.folders, !!opts.adopt, opts.replaceDev)))
+      return false;
     const pending: Pending = {
       schema: 1,
       addonsDir: ctx.addonsDir,
@@ -440,19 +478,38 @@ async function transact(
       before: structuredClone(state),
       operations: [],
     };
-    for (const folder of folders)
+    const incoming = new Set(archive.folders.map((folder) => folder.toLowerCase()));
+    for (const folder of folders) {
+      const ships = incoming.has(folder.toLowerCase());
+      const shared = otherOwners(state, id, folder).length > 0;
+      // Another addon still ships a folder this one no longer does: keep the copy on disk.
+      if (!ships && shared) continue;
+      // A shared folder stays at the newest TOC version, so an older incoming copy is not written.
+      if (!(await sharedCopyWins(ctx, archive, folder, shared))) continue;
       pending.operations.push({
         folder,
         hadOld: !!(await info(join(ctx.addonsDir, folder))),
-        putNew: archive.folders.includes(folder),
+        putNew: ships,
       });
+    }
     checkAbort(opts.signal);
     await atomicWrite(pendingPath(ctx), `${JSON.stringify(pending, null, 2)}\n`);
     recorded = true;
     try {
       for (const operation of pending.operations) {
         checkAbort(opts.signal);
-        if (!(await preflight(ctx, state, id, [operation.folder], !!opts.adopt, opts.replaceDev)))
+        const incoming = operation.putNew ? [operation.folder] : [];
+        if (
+          !(await preflight(
+            ctx,
+            state,
+            id,
+            [operation.folder],
+            incoming,
+            !!opts.adopt,
+            opts.replaceDev,
+          ))
+        )
           throw new WowaddonError("DEV_PROTECTED", DEV_SKIPPED);
         if (operation.hadOld)
           await (opts.rename ?? rename)(
@@ -530,7 +587,8 @@ export async function installAddon(
   const archive = opts.archive ?? (await readRelease(ctx, entry, release, opts.signal));
   if (opts.dryRun) {
     const folders = installFolders(state, entry.id, archive.folders);
-    if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt, replace))) return skipDev();
+    if (!(await preflight(ctx, state, entry.id, folders, archive.folders, !!opts.adopt, replace)))
+      return skipDev();
     return {
       entry,
       installed,

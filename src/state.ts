@@ -65,7 +65,6 @@ export function validateState(data: unknown, ctx: Context): State {
       "STATE_DESTINATION",
       `State belongs to ${state.addonsDir}, not ${ctx.addonsDir}. Use the original AddOns directory or a separate configuration directory.`,
     );
-  const folders = new Set<string>();
   for (const [id, installed] of Object.entries(state.addons)) {
     if (
       !/^(?:gh:[a-z0-9-]+\/[a-z0-9_.-]+|cf:[1-9]\d*|wowi:[1-9]\d*|(?:tukui|wago):[a-z0-9]+(?:[-_][a-z0-9]+)*)$/.test(
@@ -79,6 +78,8 @@ export function validateState(data: unknown, ctx: Context): State {
       installed.folders.length === 0
     )
       return invalid();
+    // A folder may be listed by several addons (a bundled library), but only once per addon.
+    const folders = new Set<string>();
     for (const folder of installed.folders) {
       if (!safeFolder(folder) || folders.has(folder.toLowerCase())) return invalid();
       folders.add(folder.toLowerCase());
