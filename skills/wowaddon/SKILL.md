@@ -15,16 +15,19 @@ client.
 
 1. Run `wowaddon check --json`. `updates` counts addons sync would install or update; rows with
    status `error` carry a `code` and `message`, and `missingDependencies` names a tracked
-   CurseForge addon whose required dependency is neither tracked nor installed. `check` mostly
-   judges without downloading, so `sync --dry-run` is the exact preview when a folder might be in
-   the way.
+   CurseForge addon whose required dependency is neither tracked nor installed. `keyProblems`
+   names a configured CurseForge key the API rejected (HTTP 401 or 403) and the `cf_token` file
+   to replace; the keyless fallback still works, so tell the user about it rather than calling the
+   run broken. `check` mostly judges without downloading, so `sync --dry-run` is the exact preview
+   when a folder might be in the way.
 2. Before any change the user did not spell out, preview it with `--dry-run` on `sync`, `add` or
    `remove` and show the user what would change.
-3. Run the change: `wowaddon sync --json` (optionally with ids), `wowaddon add <ref|url> --json`
-   or `wowaddon remove <id|ref> --json`. Done when the exit code is 0 and no row has status
-   `error`. `add` and `sync` install a CurseForge addon's required dependencies (such as a shared
-   core) as normal manifest entries, reported in `dependencies`; they then show in `list`, update
-   with `sync` and can be removed like any other addon.
+3. Run the change: `wowaddon sync --json` (optionally with ids), `wowaddon add <ref|url>... --json`
+   (several references install in turn, reported in `addons`) or `wowaddon remove <id|ref> --json`.
+   Done when the exit code is 0 and no row has status `error`. `add` and `sync` install a
+   CurseForge addon's required dependencies (such as a shared core) as normal manifest entries,
+   reported in `dependencies`; they then show in `list`, update with `sync` and can be removed
+   like any other addon.
 4. Report `backup` from the sync output: the WTF snapshot taken before the first change.
 
 On exit code 1, report each failed row's `code` and `message`. On 2, fix the command or ask for
@@ -57,3 +60,6 @@ Safety rules:
 - `WAGO_KEY_MISSING`: Wago Addons needs the user's own API key (a paid Wago Patreon feature).
   Tell them to set `WAGO_ADDONS_API_KEY` or write `~/.config/wowaddon/wago_token`; never ask
   them to paste the key into the chat or a tracked file.
+- `keyProblems` in `check` with source `curseforge`: `api.curseforge.com` rejected the configured
+  key. Tell the user to replace `cf_token` (the reported `file`) or unset `CF_API_KEY`, and that
+  the keyless fallback still works in the meantime. Never ask for the key itself.

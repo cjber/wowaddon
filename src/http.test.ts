@@ -1,6 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { forgeRedirect, requestBytes, requestJson, setFetch } from "./http";
-import { offline } from "./testing/helpers";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  forgeRedirect,
+  getCredentials,
+  keyProblems,
+  requestBytes,
+  requestJson,
+  setFetch,
+} from "./http";
+import { offline, tempContext } from "./testing/helpers";
 
 afterEach(offline);
 test("credentials recomputed per manual redirect, exact origins only", async () => {
@@ -104,6 +113,75 @@ test("honors cancellation and timeout", async () => {
   await expect(requestBytes("https://example.com", { timeoutMs: 5 })).rejects.toMatchObject({
     code: "HTTP_TIMEOUT",
   });
+});
+test("reports exactly a 401/403 the CurseForge API gave a configured key, once", async () => {
+  const fixture = await tempContext("forever");
+  try {
+    await writeFile(join(fixture.ctx.configDir, "cf_token"), "cf-secret");
+    const credentials = await getCredentials(fixture.ctx);
+    expect(credentials.curseforge).toBe("cf-secret");
+    // Neither the website's own 403 nor any other API status is the API rejecting the key.
+    for (const [url, status] of [
+      ["https://www.curseforge.com/api/v1/mods/1/files", 403],
+      ["https://api.curseforge.com/v1/mods/1", 404],
+      ["https://api.curseforge.com/v1/mods/1", 500],
+    ] as const) {
+      setFetch(async () => new Response(null, { status }));
+      await expect(requestJson(url, { credentials })).rejects.toMatchObject({
+        code: `HTTP_${status}`,
+      });
+      expect(await keyProblems(fixture.ctx)).toEqual([]);
+    }
+    setFetch(async () => new Response(null, { status: 403 }));
+    await expect(
+      requestJson("https://api.curseforge.com/v1/mods/1", { credentials }),
+    ).rejects.toMatchObject({ code: "HTTP_403" });
+    const [problem] = await keyProblems(fixture.ctx);
+    expect(problem).toMatchObject({
+      source: "curseforge",
+      status: 403,
+      file: join(fixture.ctx.configDir, "cf_token"),
+    });
+    expect(problem.message).toContain("HTTP 403");
+    expect(problem.message).toContain("cf_token");
+    // A later rejection in the same run does not duplicate or replace the first one.
+    setFetch(async () => new Response(null, { status: 401 }));
+    await expect(
+      requestJson("https://api.curseforge.com/v1/mods/1", { credentials }),
+    ).rejects.toMatchObject({ code: "HTTP_401" });
+    expect(await keyProblems(fixture.ctx)).toHaveLength(1);
+    expect((await keyProblems(fixture.ctx))[0].status).toBe(403);
+  } finally {
+    offline();
+    await fixture.cleanup();
+  }
+});
+test("a 401 from the CurseForge API is reported too", async () => {
+  const fixture = await tempContext("forever", { CF_API_KEY: "cf-secret" });
+  try {
+    const credentials = await getCredentials(fixture.ctx);
+    setFetch(async () => new Response(null, { status: 401 }));
+    await expect(
+      requestJson("https://api.curseforge.com/v1/mods/1", { credentials }),
+    ).rejects.toMatchObject({ code: "HTTP_401" });
+    expect((await keyProblems(fixture.ctx))[0]).toMatchObject({ status: 401 });
+  } finally {
+    offline();
+    await fixture.cleanup();
+  }
+});
+test("no key means no report, even when the API answers 403", async () => {
+  const fixture = await tempContext("forever");
+  try {
+    setFetch(async () => new Response(null, { status: 403 }));
+    await expect(requestJson("https://api.curseforge.com/v1/mods/1")).rejects.toMatchObject({
+      code: "HTTP_403",
+    });
+    expect(await keyProblems(fixture.ctx)).toEqual([]);
+  } finally {
+    offline();
+    await fixture.cleanup();
+  }
 });
 test("CF download redirects must reach HTTPS forgecdn subdomains", () => {
   expect(() => forgeRedirect(new URL("https://edge.forgecdn.net/files/1.zip"))).not.toThrow();

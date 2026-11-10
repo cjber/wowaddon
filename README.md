@@ -36,7 +36,7 @@ wowaddon categories                    # category names that --category takes
 wowaddon adopt [--dry-run] [--wowup PATH] [--no-wowup] [--no-backup]
 wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]
 wowaddon check [<id|ref>...]           # what sync would do, mostly without downloading
-wowaddon add <ref|url> [--note TEXT] [--no-install] [--adopt] [--dry-run]
+wowaddon add <ref|url>... [--note TEXT] [--no-install] [--adopt] [--dry-run]
 wowaddon add <kind> <ref> [--note TEXT] [--no-install] [--adopt] [--dry-run]
 wowaddon remove <id|ref> [--dry-run]
 wowaddon list [--refresh]
@@ -52,9 +52,12 @@ Output is plain lines to stdout, progress to stderr: `OK cf:6124 Auctionator 11.
 `SKIP gh:a/b dev link, skipped: ...`, `FAIL gh:a/b <message>`. `--dry-run` on `add` and `sync`
 downloads each release it would install and checks its folders, so it reports the status a real
 run would give, such as `unmanaged`, but leaves the manifest, state and AddOns folder as they are.
-`add` is all or nothing: the manifest gains the addon only when it installs (or with
+`add` is all or nothing per addon: the manifest gains the addon only when it installs (or with
 `--no-install`), so an add that fails or is stopped by an `unmanaged` folder can be rerun as is or
-with `--adopt`.
+with `--adopt`. It takes one or more references: when the first argument is itself a complete
+reference (`cf:`, `gh:`, `wowi:`, `tukui:`, `wago:`, `OWNER/REPO` or a URL), every argument is
+installed in turn, so `add cf:327139 cf:335803` works. Otherwise the first two arguments are the
+`<kind> <ref>` form, so `add cf 327139` still works.
 
 A CurseForge file can name required dependencies, such as a shared core library. `add` and `sync`
 install every required dependency the manifest does not track yet as a normal `cf:<id>` manifest
@@ -143,7 +146,9 @@ manifest and installed-state file.
 `addons.wago.io/addons/<slug>` link. A bare name such as `elvui` also finds the manifest entry
 with that ref. CurseForge works without a key by reading its public
 files listing; set `CF_API_KEY`/`CURSEFORGE_API_KEY` (or `~/.config/wowaddon/cf_token`) only
-if that stops working for you.
+if that stops working for you. A key the Core API rejects with HTTP 401 or 403 is reported as a
+`WARN` line naming the key file, and by `check` as `keyProblems`, while the keyless listing
+continues to work.
 
 A GitHub token avoids the 60/hour anonymous API limit: `GH_TOKEN`/`GITHUB_TOKEN`,
 `~/.config/wowaddon/token`, or `gh auth token`. It is sent only to `api.github.com`, never to
@@ -250,7 +255,10 @@ With `--json` each run prints exactly one JSON document on stdout and keeps prog
 `search` and `browse` print `{ results: Listing[], sources: SourceReport[] }`, where a listing is
 `{ ref, kind, name, summary, authors, downloads, updated, categories, gameVersions, flavors, url }`;
 `info` prints `{ addon }` with that plus `version`, `links`, `folders`, `description` and
-`changelog`; `adopt` prints `{ matches, addons, unmatched, skipped, backup }`.
+`changelog`; `add` prints `{ addon (the first reference), addons, dependencies }`; `adopt` prints
+`{ matches, addons, unmatched, skipped, backup }`. `check` prints `keyProblems` when a configured
+CurseForge key was rejected: `{ source: 'curseforge', status: 401 | 403, file, message }`, where
+`file` names the `cf_token` file to replace.
 
 A row is `{ entry, installed?, latest?, status, message?, code?, devTag? }`, where `status` is one
 of `missing`, `update`, `updated`, `current`, `unknown`, `dev`, `unmanaged` or `error`, `code` is

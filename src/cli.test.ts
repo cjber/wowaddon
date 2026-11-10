@@ -4,6 +4,7 @@ import {
   type AddonInfo,
   type Context,
   type Flavor,
+  type KeyProblem,
   type Listing,
   type Row,
   type SourceKind,
@@ -46,6 +47,7 @@ const removeAddonMock = mock(
   }),
 );
 const parseRefMock = mock((_input: string) => ({ kind: "gh" as const, ref: "owner/repo" }));
+const keyProblemsMock = mock(async (_ctx: Context): Promise<KeyProblem[]> => []);
 const listing: Listing = {
   ref: "cf:1735937",
   kind: "cf",
@@ -127,6 +129,7 @@ mock.module("./service", () => ({
   syncAddons: syncAddonsMock,
   removeAddon: removeAddonMock,
   parseRef: parseRefMock,
+  keyProblems: keyProblemsMock,
   findAddons: findAddonsMock,
   addonInfo: addonInfoMock,
   listCategories: listCategoriesMock,
@@ -198,6 +201,7 @@ beforeEach(() => {
   removeAddonMock.mockClear();
   parseRefMock.mockClear();
   for (const m of [
+    keyProblemsMock,
     findAddonsMock,
     addonInfoMock,
     listCategoriesMock,
@@ -209,6 +213,7 @@ beforeEach(() => {
   ])
     m.mockClear();
   listUntrackedMock.mockImplementation(async () => []);
+  keyProblemsMock.mockImplementation(async () => []);
   openContextMock.mockImplementation(async () => context);
   listRowsMock.mockImplementation(async () => []);
   addAddonMock.mockImplementation(async () => okRow());
@@ -304,6 +309,46 @@ describe("add", () => {
     await runCli(["add", "owner/repo", "--no-install"]);
     const opts = addAddonMock.mock.calls[0][2] as { install: boolean };
     expect(opts.install).toBe(false);
+  });
+
+  test("a first argument that is a full reference starts a list of references", async () => {
+    expect(await runCli(["add", "cf:327139", "cf:335803", "--json"])).toBe(0);
+    expect(addAddonMock.mock.calls.map((call) => call[1])).toEqual(["cf:327139", "cf:335803"]);
+    const doc = JSON.parse(logs[0]);
+    expect(doc.addons).toHaveLength(2);
+    expect(doc.addon).toEqual(doc.addons[0]);
+  });
+
+  test("OWNER/REPO first means each argument is its own reference", async () => {
+    await runCli(["add", "owner/repo", "other/repo"]);
+    expect(addAddonMock.mock.calls.map((call) => call[1])).toEqual(["owner/repo", "other/repo"]);
+  });
+
+  test("more than one <kind> <ref> pair is a usage error, not a guess", async () => {
+    expect(await runCli(["add", "cf", "327139", "cf:335803"])).toBe(2);
+    expect(addAddonMock).not.toHaveBeenCalled();
+  });
+
+  test("one reference keeps the single addon and addons shape", async () => {
+    await runCli(["add", "cf:327139", "--json"]);
+    expect(JSON.parse(logs[0])).toMatchObject({
+      addon: { entry: { id: "cf:6124" } },
+      addons: [{ entry: { id: "cf:6124" } }],
+    });
+  });
+
+  test("a failure in a list is a row and the rest are still attempted", async () => {
+    addAddonMock
+      .mockImplementationOnce(async () => okRow())
+      .mockImplementationOnce(async () => {
+        throw new WowaddonError("DUPLICATE", "Addon already in manifest: cf:335803");
+      })
+      .mockImplementationOnce(async () => okRow());
+    expect(await runCli(["add", "cf:1", "cf:2", "cf:3", "--json"])).toBe(1);
+    expect(addAddonMock).toHaveBeenCalledTimes(3);
+    const doc = JSON.parse(logs[0]);
+    expect(doc.addons.map((row: Row) => row.status)).toEqual(["current", "error", "current"]);
+    expect(doc.addons[1]).toMatchObject({ code: "DUPLICATE" });
   });
 
   test("--note is forwarded", async () => {
@@ -418,6 +463,34 @@ describe("check and dry runs", () => {
     expect(logs).toEqual(["all 1 addons are current"]);
   });
 
+  test("check reports a rejected CurseForge key once, naming the key file", async () => {
+    const problem: KeyProblem = {
+      source: "curseforge",
+      status: 403,
+      file: "/config/wowaddon/cf_token",
+      message:
+        "CurseForge rejected the API key in /config/wowaddon/cf_token (HTTP 403). Replace it.",
+    };
+    keyProblemsMock.mockImplementation(async () => [problem]);
+    expect(await runCli(["check", "--json"])).toBe(0);
+    expect(JSON.parse(logs[0]).keyProblems).toEqual([problem]);
+    expect(await runCli(["check"])).toBe(0);
+    expect(logs).toContain(`WARN ${problem.message}`);
+  });
+
+  test("every other command warns about a rejected key on stderr", async () => {
+    keyProblemsMock.mockImplementation(async () => [
+      {
+        source: "curseforge",
+        status: 401,
+        file: "/config/wowaddon/cf_token",
+        message: "CurseForge rejected the API key in /config/wowaddon/cf_token (HTTP 401).",
+      },
+    ]);
+    await runCli(["list"]);
+    expect(errs.filter((line) => line.includes("cf_token"))).toHaveLength(1);
+  });
+
   test("check reports a required dependency neither tracked nor installed", async () => {
     listRowsMock.mockImplementation(async () => [okRow({ missingDependencies: ["cf:9001"] })]);
     expect(await runCli(["check", "--json"])).toBe(0);
@@ -473,6 +546,10 @@ describe("schema and JSON errors", () => {
     expect(doc.commands.sync.usage).toBe(
       "wowaddon sync [<id|ref>...] [--adopt] [--dry-run] [--no-backup]",
     );
+    expect(doc.commands.add.usage).toBe(
+      "wowaddon add <ref|url>... | <kind> <ref> [--note TEXT] [--no-install] [--adopt] [--dry-run]",
+    );
+    expect(doc.output.KeyProblem).toContain("cf_token");
     expect(doc.exitCodes.locked.code).toBe(3);
     expect(Object.keys(doc.statuses)).toContain("dev");
     expect(openContextMock).not.toHaveBeenCalled();

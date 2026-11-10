@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { contextEnv, isMissing } from "./config";
-import { type Context, WowaddonError } from "./types";
+import { type Context, type KeyProblem, WowaddonError } from "./types";
 
 export const WAGO_API = "https://addons.wago.io";
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -17,6 +17,10 @@ export interface Credentials {
   wago?: string;
 }
 const credentials = new WeakMap<Context, Promise<Credentials>>();
+// The first 401/403 the CurseForge API answered a configured key with, per credentials object.
+// Recording the status here keeps the report to exactly what the API said, and keeps it to one
+// report however many addons hit it in the same run.
+const rejections = new WeakMap<Credentials, 401 | 403>();
 async function tokenFile(path: string): Promise<string | undefined> {
   try {
     return (await readFile(path, "utf8")).trim() || undefined;
@@ -55,6 +59,23 @@ export function getCredentials(ctx: Context): Promise<Credentials> {
     credentials.set(ctx, value);
   }
   return value;
+}
+// What a source's own API said about the configured key, without resolving credentials for a run
+// that never used them. A key rejected once is reported once, however many requests it failed.
+export async function keyProblems(ctx: Context): Promise<KeyProblem[]> {
+  const pending = credentials.get(ctx);
+  if (!pending) return [];
+  const status = rejections.get(await pending);
+  if (status === undefined) return [];
+  const file = join(ctx.configDir, "cf_token");
+  return [
+    {
+      source: "curseforge",
+      status,
+      file,
+      message: `CurseForge rejected the API key in ${file} (HTTP ${status}). Replace it, or unset CF_API_KEY/CURSEFORGE_API_KEY.`,
+    },
+  ];
 }
 export function redact(message: string, secrets: Credentials = {}): string {
   for (const secret of Object.values(secrets)) {
@@ -130,6 +151,14 @@ export async function requestBytes(value: string, opts: HttpOptions = {}): Promi
       }
       if (!response.ok) {
         await response.body?.cancel();
+        const status = response.status;
+        if (
+          url.origin === "https://api.curseforge.com" &&
+          secrets.curseforge &&
+          (status === 401 || status === 403) &&
+          !rejections.has(secrets)
+        )
+          rejections.set(secrets, status);
         throw new WowaddonError(
           `HTTP_${response.status}`,
           `HTTP ${response.status} from ${url.origin}${url.pathname}`,

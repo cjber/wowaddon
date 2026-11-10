@@ -30,6 +30,14 @@ export type Status =
   | "dev"
   | "unmanaged"
   | "error";
+// A configured API key a source's own API rejected, for check to report instead of hiding it
+// behind the keyless fallback.
+export interface KeyProblem {
+  source: "curseforge";
+  status: 401 | 403;
+  file: string;
+  message: string;
+}
 export interface Row {
   entry: Entry;
   installed?: Installed;

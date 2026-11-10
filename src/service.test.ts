@@ -5,7 +5,7 @@ import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
 import { CURSE_TOOLS } from "./discover/curseforge";
 import { setFetch } from "./http";
 import { manifestPath } from "./manifest";
-import { addAddon, listRows, removeAddon, syncAddons } from "./service";
+import { addAddon, keyProblems, listRows, removeAddon, syncAddons } from "./service";
 import { readState, writeState } from "./state";
 import questieMod from "./testing/fixtures/ct-mod-questie.json";
 import { json, offline, routeFetch, tempContext, zip } from "./testing/helpers";
@@ -46,6 +46,27 @@ test("CF slug writes numeric ID with title", async () => {
   await expect(addAddon(fixture.ctx, "6124", { install: false })).rejects.toMatchObject({
     code: "DUPLICATE",
   });
+});
+test("a refresh records the CurseForge key the API rejected while falling back", async () => {
+  await writeFile(join(fixture.ctx.configDir, "cf_token"), "cf-secret");
+  await writeFile(manifestPath(fixture.ctx), "cf 1708506\n");
+  const calls: string[] = [];
+  setFetch(async (url) => {
+    calls.push(url);
+    if (url.startsWith("https://www.curseforge.com/")) return new Response(null, { status: 403 });
+    if (url.startsWith("https://api.curseforge.com/")) return new Response(null, { status: 403 });
+    throw new Error(`Unexpected network request: ${url}`);
+  });
+  const rows = await listRows(fixture.ctx, { refresh: true });
+  expect(rows[0].status).toBe("error");
+  expect(calls.some((url) => url.startsWith("https://api.curseforge.com/"))).toBe(true);
+  expect(await keyProblems(fixture.ctx)).toMatchObject([
+    {
+      source: "curseforge",
+      status: 403,
+      file: join(fixture.ctx.configDir, "cf_token"),
+    },
+  ]);
 });
 test("CF numeric ID writes the project title", async () => {
   setFetch(
