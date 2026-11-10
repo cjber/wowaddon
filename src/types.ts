@@ -18,6 +18,8 @@ export interface Release {
   url: string;
   archive: "package" | "source";
   note?: string;
+  // Required CurseForge dependency project IDs.
+  requires?: string[];
 }
 export type Status =
   | "missing"
@@ -37,6 +39,10 @@ export interface Row {
   code?: string;
   // The release tag a dev build's `## Version: <tag>-dev+<sha>` was built from.
   devTag?: string;
+  // Required dependencies this operation added to the manifest and installed.
+  dependencies?: Row[];
+  // Required CurseForge dependencies neither tracked nor installed, for `check`.
+  missingDependencies?: string[];
 }
 export type Phase = "resolving" | "downloading" | "installing" | "done" | "skipped" | "failed";
 export interface Progress {

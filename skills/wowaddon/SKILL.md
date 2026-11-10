@@ -14,13 +14,17 @@ code; read it once instead of parsing `--help`. Add `--flavor era|forever` whene
 client.
 
 1. Run `wowaddon check --json`. `updates` counts addons sync would install or update; rows with
-   status `error` carry a `code` and `message`. `check` mostly judges without downloading, so
-   `sync --dry-run` is the exact preview when a folder might be in the way.
+   status `error` carry a `code` and `message`, and `missingDependencies` names a tracked
+   CurseForge addon whose required dependency is neither tracked nor installed. `check` mostly
+   judges without downloading, so `sync --dry-run` is the exact preview when a folder might be in
+   the way.
 2. Before any change the user did not spell out, preview it with `--dry-run` on `sync`, `add` or
    `remove` and show the user what would change.
 3. Run the change: `wowaddon sync --json` (optionally with ids), `wowaddon add <ref|url> --json`
    or `wowaddon remove <id|ref> --json`. Done when the exit code is 0 and no row has status
-   `error`.
+   `error`. `add` and `sync` install a CurseForge addon's required dependencies (such as a shared
+   core) as normal manifest entries, reported in `dependencies`; they then show in `list`, update
+   with `sync` and can be removed like any other addon.
 4. Report `backup` from the sync output: the WTF snapshot taken before the first change.
 
 On exit code 1, report each failed row's `code` and `message`. On 2, fix the command or ask for

@@ -159,6 +159,8 @@ test("an add stopped by an unmanaged folder leaves the manifest alone, so --adop
 });
 const questieFiles =
   "https://www.curseforge.com/api/v1/mods/334372/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true";
+const questieDependencies =
+  "https://www.curseforge.com/api/v1/mods/334372/files/9/dependencies?index=0&pageSize=50";
 const questieRoutes = {
   [questieFiles]: {
     data: [
@@ -173,6 +175,7 @@ const questieRoutes = {
     ],
     pagination: { totalCount: 1 },
   },
+  [questieDependencies]: { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } },
 };
 async function checkStatus() {
   return (await listRows(fixture.ctx, { refresh: true })).map((row) => row.status);
@@ -188,7 +191,7 @@ test("check judges a missing addon from the cheapest evidence that settles it", 
   setFetch(routes.fetch);
   // No untracked folder at all: missing, from the release alone.
   expect(await checkStatus()).toEqual(["missing"]);
-  expect(routes.calls).toEqual([questieFiles]);
+  expect(routes.calls).toEqual([questieFiles, questieDependencies]);
   // An untracked folder the source does not list: missing, from its folder list.
   await mkdir(join(fixture.ctx.addonsDir, "Other"));
   routes.calls.length = 0;
@@ -203,7 +206,7 @@ test("check judges a missing addon from the cheapest evidence that settles it", 
   routes.calls.length = 0;
   const [row] = await listRows(fixture.ctx, { refresh: true });
   expect(row).toMatchObject({ status: "unmanaged", code: "UNMANAGED" });
-  expect(routes.calls).toEqual([questieFiles]);
+  expect(routes.calls).toEqual([questieFiles, questieDependencies]);
 });
 test("check matches an untracked folder by the source's folder list, and a symlink is dev", async () => {
   fixture.ctx.flavor = "era";
@@ -529,4 +532,161 @@ test("a failed WTF backup fails every install and changes nothing", async () => 
 test("a bare name finds the one manifest entry with that ref, offline", async () => {
   await writeFile(manifestPath(fixture.ctx), "tukui elvui\ngh a/b\n");
   expect((await removeAddon(fixture.ctx, "ElvUI", { dryRun: true })).entry.id).toBe("tukui:elvui");
+});
+
+const cfFilesUrl = (id: number) =>
+  `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true`;
+const cfDependenciesUrl = (id: number, fileId: number) =>
+  `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/dependencies?index=0&pageSize=50`;
+const cfDownloadUrl = (id: number, fileId: number) =>
+  `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/download`;
+function cfFile(projectId: number, fileId: number) {
+  return {
+    id: fileId,
+    projectId,
+    fileName: `Addon${projectId}.zip`,
+    gameVersionTypeIds: [88568],
+    gameVersions: ["1.60.1"],
+    releaseType: 1,
+  };
+}
+function cfDependencies(
+  dependencies: {
+    id: number;
+    type: "RequiredDependency" | "OptionalDependency" | "EmbeddedLibrary";
+  }[] = [],
+) {
+  return {
+    data: dependencies.map((dependency) => ({
+      ...dependency,
+      name: `Mod ${dependency.id}`,
+      slug: `mod-${dependency.id}`,
+    })),
+    pagination: { index: 0, pageSize: 50, totalCount: dependencies.length },
+  };
+}
+async function dependencyRoutes() {
+  const parent = await zip({ "Parent/Parent.toc": "## Interface: 16001" });
+  const dependency = await zip({ "Core/Core.toc": "## Interface: 16001" });
+  return routeFetch({
+    "https://api.cfwidget.com/wow/addons/1000": { id: 1000, title: "Parent" },
+    "https://api.cfwidget.com/wow/addons/2000": { id: 2000, title: "Core" },
+    [cfFilesUrl(1000)]: {
+      data: [cfFile(1000, 1)],
+      pagination: { totalCount: 1 },
+    },
+    [cfDependenciesUrl(1000, 1)]: cfDependencies([
+      { id: 2000, type: "RequiredDependency" },
+      { id: 3000, type: "OptionalDependency" },
+    ]),
+    [cfFilesUrl(2000)]: {
+      data: [cfFile(2000, 2)],
+      pagination: { totalCount: 1 },
+    },
+    [cfDependenciesUrl(2000, 2)]: cfDependencies([{ id: 2000, type: "RequiredDependency" }]),
+    [cfDownloadUrl(1000, 1)]: new Response(parent),
+    [cfDownloadUrl(2000, 2)]: new Response(dependency),
+  });
+}
+test("add installs a required CurseForge dependency and ignores optional ones", async () => {
+  const routes = await dependencyRoutes();
+  setFetch(routes.fetch);
+  const row = await addAddon(fixture.ctx, "cf:1000", { install: true });
+  expect(row.status).toBe("current");
+  expect(row.dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe(
+    "cf 1000  # Parent\ncf 2000  # Core\n",
+  );
+  const state = await readState(fixture.ctx);
+  expect(Object.keys(state.addons).sort()).toEqual(["cf:1000", "cf:2000"]);
+  expect(state.addons["cf:2000"].folders).toEqual(["Core"]);
+  expect(routes.calls.some((url) => url.includes("/mods/3000/"))).toBe(false);
+  expect(routes.calls.filter((url) => url === cfDownloadUrl(2000, 2))).toHaveLength(1);
+});
+test("an already tracked dependency is not resolved or added again", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 2000\n");
+  const routes = await dependencyRoutes();
+  setFetch(routes.fetch);
+  const row = await addAddon(fixture.ctx, "cf:1000", { install: true });
+  expect(row.status).toBe("current");
+  expect(row.dependencies).toBeUndefined();
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 2000\ncf 1000  # Parent\n");
+  expect(routes.calls.some((url) => url.includes("/mods/2000/"))).toBe(false);
+});
+test("a dependency whose folders another tracked addon installed is left out", async () => {
+  await writeFile(manifestPath(fixture.ctx), "gh a/b\n");
+  const state = await readState(fixture.ctx);
+  state.addons["gh:a/b"] = {
+    version: "v1",
+    versionKey: "1",
+    folders: ["Core"],
+    installedAt: "now",
+  };
+  await writeState(fixture.ctx, state);
+  setFetch((await dependencyRoutes()).fetch);
+  const row = await addAddon(fixture.ctx, "cf:1000", { install: true });
+  expect(row.status).toBe("current");
+  expect(row.dependencies).toBeUndefined();
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("gh a/b\ncf 1000  # Parent\n");
+  expect((await readState(fixture.ctx)).addons["cf:2000"]).toBeUndefined();
+});
+test("sync installs a required dependency of a tracked CurseForge addon", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 1000\n");
+  const routes = await dependencyRoutes();
+  setFetch(routes.fetch);
+  const { rows } = await syncAddons(fixture.ctx, {});
+  expect(rows[0].status).toBe("current");
+  expect(rows[0].dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 1000\ncf 2000  # Core\n");
+  expect(Object.keys((await readState(fixture.ctx)).addons).sort()).toEqual(["cf:1000", "cf:2000"]);
+});
+test("sync --dry-run reports the dependency and writes nothing", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 1000\n");
+  setFetch((await dependencyRoutes()).fetch);
+  const { rows } = await syncAddons(fixture.ctx, { dryRun: true });
+  expect(rows[0].dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 1000\n");
+  expect(await readState(fixture.ctx)).toMatchObject({ addons: {} });
+  expect(await readdir(fixture.ctx.addonsDir)).toEqual([]);
+});
+test("a dependency cycle terminates after installing each addon once", async () => {
+  const routes = await dependencyRoutes();
+  setFetch(routes.fetch);
+  const row = await addAddon(fixture.ctx, "cf:1000", { install: true });
+  expect(row.status).toBe("current");
+  expect(row.dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  expect(routes.calls.filter((url) => url === cfDownloadUrl(1000, 1))).toHaveLength(1);
+  expect(routes.calls.filter((url) => url === cfDownloadUrl(2000, 2))).toHaveLength(1);
+  expect(Object.keys((await readState(fixture.ctx)).addons).sort()).toEqual(["cf:1000", "cf:2000"]);
+});
+test("add --dry-run reports dependencies and writes nothing", async () => {
+  setFetch((await dependencyRoutes()).fetch);
+  const row = await addAddon(fixture.ctx, "cf:1000", { install: true, dryRun: true });
+  expect(row.dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  await expect(readFile(manifestPath(fixture.ctx), "utf8")).rejects.toThrow();
+  expect(await readState(fixture.ctx)).toMatchObject({ addons: {} });
+  expect(await readdir(fixture.ctx.addonsDir)).toEqual([]);
+  expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
+});
+test("check reports a required dependency neither tracked nor installed", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 1000\n");
+  const routes = await dependencyRoutes();
+  setFetch(routes.fetch);
+  expect((await listRows(fixture.ctx, { refresh: true }))[0].missingDependencies).toEqual([
+    "cf:2000",
+  ]);
+  // Tracked: no longer missing.
+  await writeFile(manifestPath(fixture.ctx), "cf 1000\ncf 2000\n");
+  expect((await listRows(fixture.ctx, { refresh: true }))[0].missingDependencies).toBeUndefined();
+  // Installed under its own id but not tracked: still not reported.
+  await writeFile(manifestPath(fixture.ctx), "cf 1000\n");
+  const state = await readState(fixture.ctx);
+  state.addons["cf:2000"] = {
+    version: "v1",
+    versionKey: "2",
+    folders: ["Core"],
+    installedAt: "now",
+  };
+  await writeState(fixture.ctx, state);
+  expect((await listRows(fixture.ctx, { refresh: true }))[0].missingDependencies).toBeUndefined();
 });

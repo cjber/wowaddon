@@ -317,6 +317,18 @@ describe("add", () => {
     const code = await runCli(["add", "owner/repo"]);
     expect(code).toBe(1);
   });
+
+  test("reports the dependencies the add installed", async () => {
+    const dependency = okRow({
+      entry: { id: "cf:9001", kind: "cf", ref: "9001", note: "Core" },
+    });
+    addAddonMock.mockImplementation(async () => okRow({ dependencies: [dependency] }));
+    expect(await runCli(["add", "cf:6124", "--json"])).toBe(0);
+    expect(JSON.parse(logs[0])).toMatchObject({
+      addon: { entry: { id: "cf:6124" } },
+      dependencies: [dependency],
+    });
+  });
 });
 
 describe("remove", () => {
@@ -404,6 +416,17 @@ describe("check and dry runs", () => {
     listRowsMock.mockImplementation(async () => [okRow()]);
     await runCli(["check"]);
     expect(logs).toEqual(["all 1 addons are current"]);
+  });
+
+  test("check reports a required dependency neither tracked nor installed", async () => {
+    listRowsMock.mockImplementation(async () => [okRow({ missingDependencies: ["cf:9001"] })]);
+    expect(await runCli(["check", "--json"])).toBe(0);
+    expect(JSON.parse(logs[0])).toMatchObject({
+      command: "check",
+      missingDependencies: [{ entry: "cf:6124", dependency: "cf:9001" }],
+    });
+    expect(await runCli(["check"])).toBe(0);
+    expect(logs).toContain("MISSING cf:6124 requires cf:9001: add it with wowaddon add cf:9001");
   });
 
   test("sync --dry-run previews the selected ids through the sync path", async () => {

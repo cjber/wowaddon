@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setFetch } from "../http";
 import widget from "../testing/fixtures/cfwidget-auctionator.json";
+import dependencies from "../testing/fixtures/curseforge-dependencies-questie.json";
 import forever from "../testing/fixtures/curseforge-forever.json";
 import { json, offline, routeFetch, tempContext } from "../testing/helpers";
 import {
@@ -10,6 +11,7 @@ import {
   cachedCfId,
   cfMatches,
   downloadCurseforge,
+  requiredDependencies,
   resolveCfProject,
   resolveCurseforge,
 } from "./curseforge";
@@ -25,10 +27,18 @@ afterEach(async () => {
 });
 const filesUrl = (id = "1708506", page = 0) =>
   `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=${page}&pageSize=50&sort=dateCreated&sortDescending=true`;
+const dependenciesUrl = (id = "1708506", fileId = 8970646, index = 0) =>
+  `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/dependencies?index=${index}&pageSize=50`;
+const noDependencies = { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } };
 const file = (overrides: Partial<CfFile> = {}): CfFile => ({ ...forever.data[0], ...overrides });
 const page = (data: CfFile[], totalCount = data.length) => ({ data, pagination: { totalCount } });
 test("recorded keyless Forever file has the verified ID/type", async () => {
-  setFetch(routeFetch({ [filesUrl()]: forever }).fetch);
+  setFetch(
+    routeFetch({
+      [filesUrl()]: forever,
+      [dependenciesUrl()]: noDependencies,
+    }).fetch,
+  );
   expect(await resolveCurseforge(fixture.ctx, "1708506")).toMatchObject({
     versionKey: "8970646",
     version: "v0.4.1-forever",
@@ -68,14 +78,78 @@ test("pagination dedupes, excludes foreign project IDs, and prefers releases ove
       [first[0], stable, file({ id: 888, releaseType: 2 }), file({ id: 999, projectId: 1 })],
       54,
     ),
+    [dependenciesUrl("1708506", 777)]: noDependencies,
   });
   setFetch(routes.fetch);
   expect((await resolveCurseforge(fixture.ctx, "1708506")).versionKey).toBe("777");
-  expect(routes.calls).toHaveLength(2);
+  expect(routes.calls).toHaveLength(3);
 });
 test("beta fallback is explicit in release note", async () => {
-  setFetch(routeFetch({ [filesUrl()]: page([file({ releaseType: 2 })]) }).fetch);
+  setFetch(
+    routeFetch({
+      [filesUrl()]: page([file({ releaseType: 2 })]),
+      [dependenciesUrl()]: noDependencies,
+    }).fetch,
+  );
   expect((await resolveCurseforge(fixture.ctx, "1708506")).note).toBe("beta");
+});
+test("official file dependencies keep only relationType 3 and valid ids", () => {
+  expect(
+    requiredDependencies(
+      file({
+        dependencies: [
+          { modId: 55, relationType: 3 },
+          { modId: 56, relationType: 2 },
+          { modId: 57, relationType: 1 },
+          { modId: 55, relationType: 3 },
+        ],
+      }),
+    ),
+  ).toEqual(["55"]);
+  expect(requiredDependencies(file())).toEqual([]);
+  expect(requiredDependencies(file({ dependencies: [{ modId: 0, relationType: 3 }] }))).toEqual([]);
+});
+test("the picked website file carries only its required dependency ids", async () => {
+  fixture.ctx.flavor = "era";
+  setFetch(
+    routeFetch({
+      [filesUrl("334372")]: page([
+        file({
+          id: 9539564,
+          projectId: 334372,
+          gameVersionTypeIds: [67408],
+          gameVersions: ["1.15.8"],
+        }),
+      ]),
+      [dependenciesUrl("334372", 9539564)]: dependencies,
+    }).fetch,
+  );
+  expect((await resolveCurseforge(fixture.ctx, "334372")).requires).toEqual(["1696795", "1695789"]);
+});
+test("website dependencies are read across every page", async () => {
+  fixture.ctx.flavor = "era";
+  const embedded = Array.from({ length: 50 }, (_, i) => ({
+    id: 100 + i,
+    name: `Library ${i}`,
+    type: "EmbeddedLibrary",
+    slug: `library-${i}`,
+  }));
+  setFetch(
+    routeFetch({
+      [filesUrl("334372")]: page([
+        file({ id: 9539564, projectId: 334372, gameVersionTypeIds: [67408] }),
+      ]),
+      [dependenciesUrl("334372", 9539564, 0)]: {
+        data: embedded,
+        pagination: { index: 0, pageSize: 50, totalCount: 51 },
+      },
+      [dependenciesUrl("334372", 9539564, 1)]: {
+        data: [{ id: 1696795, name: "QuestieDB", type: "RequiredDependency", slug: "questiedb" }],
+        pagination: { index: 1, pageSize: 50, totalCount: 51 },
+      },
+    }).fetch,
+  );
+  expect((await resolveCurseforge(fixture.ctx, "334372")).requires).toEqual(["1696795"]);
 });
 test("partial listing failure is unreachable, never no-build", async () => {
   setFetch(
@@ -133,10 +207,11 @@ test("404 invalidates a slug cache and re-resolves once", async () => {
     [filesUrl("123")]: new Response(null, { status: 404 }),
     "https://api.cfwidget.com/wow/addons/tweaks-forever": { id: 1708506 },
     [filesUrl()]: forever,
+    [dependenciesUrl()]: noDependencies,
   });
   setFetch(routes.fetch);
   expect((await resolveCurseforge(fixture.ctx, "tweaks-forever")).versionKey).toBe("8970646");
-  expect(routes.calls).toHaveLength(3);
+  expect(routes.calls).toHaveLength(4);
   expect(
     JSON.parse(await readFile(join(fixture.ctx.configDir, "cache/cf-slugs.json"), "utf8")),
   ).toEqual({ "tweaks-forever": "1708506" });
@@ -164,6 +239,37 @@ test("official fallback only after keyless failure and with a key", async () => 
   expect(calls).toHaveLength(2);
 });
 
+test("official listing carries its RequiredDependency ids and never asks the website", async () => {
+  await writeFile(join(fixture.ctx.configDir, "cf_token"), "cf-secret");
+  const routes = routeFetch({
+    [filesUrl()]: new Response(null, { status: 403 }),
+    "https://api.curseforge.com/v1/mods/1708506/files?gameVersionTypeId=88568&index=0&pageSize=50":
+      page([
+        file({
+          dependencies: [
+            { modId: 55, relationType: 3 },
+            { modId: 56, relationType: 2 },
+          ],
+        }),
+      ]),
+  });
+  setFetch(routes.fetch);
+  expect((await resolveCurseforge(fixture.ctx, "1708506")).requires).toEqual(["55"]);
+  expect(routes.calls).toHaveLength(2);
+});
+
+test("a blocked dependency listing is actionable, not a silent no-dependency file", async () => {
+  setFetch(
+    routeFetch({
+      [filesUrl()]: forever,
+      [dependenciesUrl()]: new Response("challenge", { status: 403 }),
+    }).fetch,
+  );
+  await expect(resolveCurseforge(fixture.ctx, "1708506")).rejects.toThrow(
+    "CurseForge blocked the request (try again later)",
+  );
+});
+
 test("official listing asks for the flavor's game version type on every page", async () => {
   await writeFile(join(fixture.ctx.configDir, "cf_token"), "cf-secret");
   const official: string[] = [];
@@ -186,6 +292,7 @@ test("prototype names are valid slugs, never inherited cache IDs", async () => {
 test("pagination stops at ten pages", async () => {
   let calls = 0;
   setFetch(async (url) => {
+    if (url === dependenciesUrl("1708506", 549)) return json(noDependencies);
     expect(url).toBe(filesUrl("1708506", calls));
     calls++;
     return json(

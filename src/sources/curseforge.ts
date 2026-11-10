@@ -26,10 +26,26 @@ export interface CfFile {
   gameVersions: string[];
   releaseType: number;
   downloadUrl?: string;
+  // Only the official files endpoint carries these (relationType 3 is RequiredDependency). The
+  // website listing has no relation data at all; its per-file dependencies endpoint is used instead.
+  dependencies?: { modId: number; relationType: number }[];
 }
 interface FilesPage {
   data: CfFile[];
   pagination: { totalCount: number };
+}
+interface CfDependency {
+  id: number;
+  type?: string;
+}
+interface DependenciesPage {
+  data: CfDependency[];
+  pagination: { totalCount: number };
+}
+interface CfListing {
+  files: CfFile[];
+  // Which endpoint answered, so its own dependency shape is the one read.
+  official: boolean;
 }
 interface Project {
   id: string;
@@ -131,12 +147,75 @@ export function cfMatches(file: CfFile, flavor: Flavor): boolean {
   if (ids.length) return ids.includes(flavors[flavor].cfType);
   return (file.gameVersions ?? []).some((version) => flavors[flavor].version.test(version));
 }
+// FileRelationType 3 is RequiredDependency; every other relation (embedded library, optional,
+// tool, incompatible, include) is ignored.
+const REQUIRED_DEPENDENCY = 3;
+// The website names the same relation in words; every other type is ignored.
+const REQUIRED_DEPENDENCY_TYPE = "RequiredDependency";
+export function requiredDependencies(file: CfFile): string[] {
+  const dependencies = Array.isArray(file.dependencies) ? file.dependencies : [];
+  const ids = dependencies
+    .filter(
+      (relation) => relation?.relationType === REQUIRED_DEPENDENCY && numericId(relation.modId),
+    )
+    .map((relation) => String(Number(relation.modId)));
+  return [...new Set(ids)];
+}
+function websiteFailure(error: unknown): never {
+  if (error instanceof WowaddonError && error.code === "ABORTED") throw error;
+  if (error instanceof WowaddonError && error.code === "HTTP_403")
+    throw new WowaddonError("CF_BLOCKED", "CurseForge blocked the request (try again later)");
+  throw new WowaddonError("CF_UNREACHABLE", "Couldn't reach CurseForge (try again later).");
+}
+// The website files listing carries no relation data, so the chosen file's dependencies are read
+// from its own endpoint, with the same browser request and page cap as the listing.
+async function websiteDependencies(
+  projectId: string,
+  fileId: number,
+  signal: AbortSignal | undefined,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  let total = Infinity;
+  try {
+    for (let page = 0; page < 10; page++) {
+      const response = await requestJson<DependenciesPage>(
+        `https://www.curseforge.com/api/v1/mods/${projectId}/files/${fileId}/dependencies?index=${page}&pageSize=50`,
+        { signal, browser: true },
+      );
+      if (!Array.isArray(response.data))
+        throw new WowaddonError("SOURCE_RESPONSE", "Invalid CurseForge dependencies response.");
+      // A file with no dependencies may answer with an empty list and no pagination block.
+      if (response.data.length === 0 && response.pagination?.totalCount === undefined)
+        return [...ids];
+      if (
+        !Number.isSafeInteger(response.pagination?.totalCount) ||
+        response.pagination.totalCount < 0
+      )
+        throw new WowaddonError("SOURCE_RESPONSE", "Invalid CurseForge dependencies response.");
+      total = response.pagination.totalCount;
+      for (const dependency of response.data)
+        if (dependency?.type === REQUIRED_DEPENDENCY_TYPE && numericId(dependency.id))
+          ids.add(String(Number(dependency.id)));
+      if ((page + 1) * 50 >= total || response.data.length === 0) {
+        if (response.data.length === 0 && page * 50 < total)
+          throw new WowaddonError(
+            "CF_UNREACHABLE",
+            "Couldn't reach CurseForge (incomplete dependencies listing).",
+          );
+        return [...ids];
+      }
+    }
+    return [...ids];
+  } catch (error) {
+    websiteFailure(error);
+  }
+}
 async function filesFrom(
   ctx: Context,
   id: string,
   signal: AbortSignal | undefined,
   official: boolean,
-): Promise<CfFile[]> {
+): Promise<CfListing> {
   const options: HttpOptions = {
     signal,
     browser: !official,
@@ -157,7 +236,7 @@ async function filesFrom(
       response.data.length === 0 &&
       response.pagination?.totalCount === undefined
     )
-      return [...files.values()];
+      return { files: [...files.values()], official };
     if (
       !Array.isArray(response.data) ||
       !Number.isSafeInteger(response.pagination?.totalCount) ||
@@ -180,12 +259,12 @@ async function filesFrom(
           "CF_UNREACHABLE",
           "Couldn't reach CurseForge (incomplete files listing).",
         );
-      return [...files.values()];
+      return { files: [...files.values()], official };
     }
   }
-  return [...files.values()];
+  return { files: [...files.values()], official };
 }
-async function listFiles(ctx: Context, id: string, signal?: AbortSignal): Promise<CfFile[]> {
+async function listFiles(ctx: Context, id: string, signal?: AbortSignal): Promise<CfListing> {
   try {
     return await filesFrom(ctx, id, signal, false);
   } catch (error) {
@@ -198,9 +277,7 @@ async function listFiles(ctx: Context, id: string, signal?: AbortSignal): Promis
         if (fallback instanceof WowaddonError && fallback.code === "ABORTED") throw fallback;
       }
     }
-    if (error instanceof WowaddonError && error.code === "HTTP_403")
-      throw new WowaddonError("CF_BLOCKED", "CurseForge blocked the request (try again later)");
-    throw new WowaddonError("CF_UNREACHABLE", "Couldn't reach CurseForge (try again later).");
+    websiteFailure(error);
   }
 }
 // The manifest names a project by a comment; a numeric ID or a cached slug resolves without one.
@@ -225,16 +302,17 @@ export async function resolveCurseforge(
   signal?: AbortSignal,
 ): Promise<Release> {
   let project = await resolveCfProject(ctx, ref, signal);
-  let files: CfFile[];
+  let listing: CfListing;
   try {
-    files = await listFiles(ctx, project.id, signal);
+    listing = await listFiles(ctx, project.id, signal);
   } catch (error) {
     if (!(error instanceof WowaddonError) || error.code !== "HTTP_404" || numericId(ref))
       throw error;
     await storeProject(ctx, ref);
     project = await resolveCfProject(ctx, ref, signal, true);
-    files = await listFiles(ctx, project.id, signal);
+    listing = await listFiles(ctx, project.id, signal);
   }
+  const { files, official } = listing;
   const matching = files.filter(
     (file) => cfMatches(file, ctx.flavor) && [1, 2, 3].includes(file.releaseType),
   );
@@ -253,12 +331,17 @@ export async function resolveCurseforge(
       `No ${flavors[ctx.flavor].name} build on CurseForge${files.some((file) => cfMatches(file, other)) ? ` (latest is ${flavors[other].name})` : ""}`,
     );
   }
+  // Only the path that produced the file knows its dependency shape, so only that one is read.
+  const requires = official
+    ? requiredDependencies(file)
+    : await websiteDependencies(project.id, file.id, signal);
   return {
     version: file.displayName || file.fileName,
     versionKey: String(file.id),
     url: `https://www.curseforge.com/api/v1/mods/${project.id}/files/${file.id}/download`,
     archive: "package",
     ...(file.releaseType !== 1 ? { note: file.releaseType === 2 ? "beta" : "alpha" } : {}),
+    ...(requires.length ? { requires } : {}),
   };
 }
 

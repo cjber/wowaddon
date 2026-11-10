@@ -329,6 +329,28 @@ export interface InstallOptions {
   rename?: typeof rename;
   // An expired dev link this install may replace; its target is never touched.
   replaceDev?: DevLink;
+  // A dependency's download, already read, so it is fetched only once.
+  archive?: Archive;
+}
+// Reads a release exactly as an install does: the bytes, then the addon folders and files in them.
+export async function readRelease(
+  ctx: Context,
+  entry: Entry,
+  release: Release,
+  signal?: AbortSignal,
+): Promise<Archive> {
+  const bytes =
+    entry.kind === "cf"
+      ? await downloadCurseforge(ctx, release, signal)
+      : await requestBytes(release.url, {
+          credentials: await getCredentials(ctx),
+          signal,
+        });
+  return readArchive(bytes, {
+    flavor: ctx.flavor,
+    source: release.archive === "source",
+    signal,
+  });
 }
 async function replacement(ctx: Context, replaceDev: DevLink | undefined, folder: string) {
   if (replaceDev?.folder !== folder) return false;
@@ -504,19 +526,8 @@ export async function installAddon(
     progress("skipped", "up to date");
     return { entry, installed, latest: release, status: "current", message: "up to date" };
   }
-  progress("downloading");
-  const bytes =
-    entry.kind === "cf"
-      ? await downloadCurseforge(ctx, release, opts.signal)
-      : await requestBytes(release.url, {
-          credentials: await getCredentials(ctx),
-          signal: opts.signal,
-        });
-  const archive = await readArchive(bytes, {
-    flavor: ctx.flavor,
-    source: release.archive === "source",
-    signal: opts.signal,
-  });
+  if (!opts.archive) progress("downloading");
+  const archive = opts.archive ?? (await readRelease(ctx, entry, release, opts.signal));
   if (opts.dryRun) {
     const folders = installFolders(state, entry.id, archive.folders);
     if (!(await preflight(ctx, state, entry.id, folders, !!opts.adopt, replace))) return skipDev();
