@@ -1,4 +1,5 @@
 import { type AdoptionPlan, planAdoption, type Untracked, untrackedFolders } from "./adopt";
+import type { Archive } from "./archive";
 import { cachedReleases, recordReleases, runBackground } from "./background";
 import { backupWtf } from "./backup";
 import { openContext as openConfiguredContext } from "./config";
@@ -16,6 +17,7 @@ import {
   installAddon,
   isProtected,
   protection,
+  readRelease,
   removeInstalled,
   withInstallLock,
 } from "./install";
@@ -162,6 +164,89 @@ function failure(entry: Entry, state: State, error: unknown): Row {
     code: error instanceof WowaddonError ? error.code : "ERROR",
   };
 }
+// A dependency row installed for real, or one a dry run would install.
+function installedRow(row: Row, dryRun: boolean | undefined): boolean {
+  if (row.status === "current" || row.status === "updated") return true;
+  return !!dryRun && (row.status === "missing" || row.status === "update");
+}
+// A required dependency neither tracked by its own id nor installed, for check to report.
+function missingRequirements(
+  release: Release | undefined,
+  manifest: Entry[],
+  state: State,
+): string[] {
+  if (!Array.isArray(release?.requires)) return [];
+  const tracked = new Set(manifest.map((entry) => entry.id));
+  return release.requires
+    .map((modId) => `cf:${modId}`)
+    .filter((id) => !tracked.has(id) && !state.addons[id]);
+}
+function dependencyEntry(modId: string): Entry {
+  return { id: `cf:${modId}`, kind: "cf", ref: modId };
+}
+// Whether a tracked addon's installed folders already carry every folder this dependency ships.
+function ownedByTracked(state: State, manifest: Entry[], folders: string[]): boolean {
+  if (!folders.length) return false;
+  return manifest.some((entry) => {
+    const installed = state.addons[entry.id];
+    if (!installed) return false;
+    const owned = new Set(installed.folders.map((folder) => folder.toLowerCase()));
+    return folders.every((folder) => owned.has(folder.toLowerCase()));
+  });
+}
+// Installs each required CurseForge dependency the manifest does not track yet, as a normal add,
+// recursing into its own requirements. Required ids seen anywhere in this operation are visited
+// once, so a dependency cycle terminates; a dependency whose folders another tracked addon
+// installed is left out. The rows of everything considered are returned for reporting.
+async function addRequirements(
+  ctx: Context,
+  state: State,
+  manifest: Entry[],
+  requires: string[] | undefined,
+  opts: InstallOptions,
+  seen: Set<string>,
+): Promise<Row[]> {
+  const rows: Row[] = [];
+  if (!Array.isArray(requires)) return rows;
+  for (const modId of requires) {
+    if (!/^[1-9]\d*$/.test(modId) || seen.has(modId)) continue;
+    seen.add(modId);
+    const id = `cf:${modId}`;
+    if (manifest.some((entry) => entry.id === id)) continue;
+    const entry = dependencyEntry(modId);
+    opts.onProgress?.({ id, phase: "resolving" });
+    let release: Release;
+    let archive: Archive;
+    try {
+      release = await resolvers.cf(ctx, modId, opts.signal);
+      opts.onProgress?.({ id, phase: "downloading" });
+      archive = await readRelease(ctx, entry, release, opts.signal);
+    } catch (error) {
+      const row = failure(entry, state, error);
+      opts.onProgress?.({ id, phase: "failed", message: row.message });
+      rows.push(row);
+      continue;
+    }
+    if (ownedByTracked(state, manifest, archive.folders)) {
+      rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, seen)));
+      continue;
+    }
+    const note = await cfProjectTitle(modId, opts.signal);
+    if (note) entry.note = note;
+    let row: Row;
+    try {
+      row = await installAddon(ctx, state, entry, release, { ...opts, archive });
+    } catch (error) {
+      row = failure(entry, state, error);
+      opts.onProgress?.({ id, phase: "failed", message: row.message });
+    }
+    rows.push(row);
+    if (!installedRow(row, opts.dryRun)) continue;
+    manifest.push(entry);
+    rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, seen)));
+  }
+  return rows;
+}
 // Whether a missing addon's install would land on a folder wowaddon does not manage, as sync would
 // find it, decided by the cheapest evidence that settles it: no such folder at all, a folder whose
 // TOC carries the addon's project ID, then the folder list the source publishes for the addon. Only
@@ -226,11 +311,13 @@ export async function listRows(
         installed,
         opts.refresh ? () => latest(ctx, entry, opts.signal) : release && (async () => release),
       );
-      rows.push(
+      const finalRow =
         opts.refresh && row.status === "missing"
           ? await blockedRow(ctx, state, row, opts.signal)
-          : row,
-      );
+          : row;
+      const missing = missingRequirements(finalRow.latest, manifest, state);
+      if (missing.length) finalRow.missingDependencies = missing;
+      rows.push(finalRow);
     } catch (error) {
       rows.push(failure(entry, state, error));
     }
@@ -308,14 +395,15 @@ export async function addAddon(
     if (parsed.kind === "cf") note ??= await cfProjectTitle(parsed.ref, opts.signal);
     const entry: Entry = { ...parsed, id, ...(note ? { note } : {}) };
     checkAbort(opts.signal);
+    const tracked = [...manifest, entry];
     // All or nothing: the manifest gains the entry only once the add has succeeded (installed, a
     // dev link left in place, or --no-install), so a failed add can simply be rerun. A dry run takes
     // the same path and never writes. A manifest write that fails after an install leaves the
     // folders recorded in state, and rerunning the add finds them current and writes the line.
-    const save = async (row: Row) => {
+    const save = async (row: Row, dependencies: Row[] = []) => {
       if (opts.dryRun) return row;
-      await writeManifest(ctx, [...manifest, entry]);
-      await recordReleases(ctx, [row], { complete: false });
+      await writeManifest(ctx, tracked);
+      await recordReleases(ctx, [row, ...dependencies], { complete: false });
       return row;
     };
     if (!opts.install) return save(await statusRow(ctx, entry, state.addons[entry.id]));
@@ -325,9 +413,13 @@ export async function addAddon(
       return row;
     }
     const row = await syncEntry(ctx, state, entry, opts, release);
-    return row.status === "current" || row.status === "dev" || row.status === "updated"
-      ? save(row)
-      : row;
+    const saves = row.status === "current" || row.status === "dev" || row.status === "updated";
+    if (!saves && !installedRow(row, opts.dryRun)) return row;
+    const dependencies = installedRow(row, opts.dryRun)
+      ? await addRequirements(ctx, state, tracked, row.latest?.requires, opts, new Set())
+      : [];
+    if (dependencies.length) row.dependencies = dependencies;
+    return saves ? save(row, dependencies) : row;
   });
 }
 async function findId(
@@ -385,15 +477,35 @@ export async function syncAddons(
             await backup;
           };
     const rows: Row[] = [];
+    const dependencies: Row[] = [];
+    const tracked = [...manifest];
+    const seen = new Set<string>();
     for (const entry of selected) {
       checkAbort(opts.signal);
       if (errors.has(entry.id)) {
         const row = failure(entry, state, errors.get(entry.id));
         opts.onProgress?.({ id: entry.id, phase: "failed", message: row.message });
         rows.push(row);
-      } else rows.push(await syncEntry(ctx, state, entry, { ...opts, beforeChange }));
+        continue;
+      }
+      const row = await syncEntry(ctx, state, entry, { ...opts, beforeChange });
+      if (installedRow(row, opts.dryRun)) {
+        const added = await addRequirements(
+          ctx,
+          state,
+          tracked,
+          row.latest?.requires,
+          { ...opts, beforeChange },
+          seen,
+        );
+        if (added.length) row.dependencies = added;
+        dependencies.push(...added);
+      }
+      rows.push(row);
     }
-    if (!opts.dryRun) await recordReleases(ctx, rows, { complete: !opts.ids?.length });
+    if (!opts.dryRun && tracked.length > manifest.length) await writeManifest(ctx, tracked);
+    if (!opts.dryRun)
+      await recordReleases(ctx, [...rows, ...dependencies], { complete: !opts.ids?.length });
     return { rows, backup: await backup?.catch(() => undefined) };
   });
 }

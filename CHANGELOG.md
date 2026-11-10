@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `add` and `sync` install a CurseForge addon's required dependencies (the website's
+  `RequiredDependency` type, `relationType` 3 in the official API) as normal manifest entries,
+  recursing through their own requirements and stopping at a cycle.
+  A dependency already tracked by `cf:<modId>` or contained in another tracked addon's installed
+  folders is not added again; optional and other relations are ignored. `--dry-run` reports the
+  dependencies and writes nothing. `add` and `sync` JSON gains `dependencies`, and `check` reports
+  a tracked addon's required dependency that is neither tracked nor installed as
+  `missingDependencies`.
+
 ## [2.2.0] - 2026-11-10
 
 ### Added

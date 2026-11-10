@@ -227,6 +227,10 @@ test("adopt adds the matches and replaces their folders behind one WTF snapshot"
     "https://api.cfwidget.com/wow/addons/301": json({}, 404),
     "https://www.curseforge.com/api/v1/mods/301/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true":
       files,
+    "https://www.curseforge.com/api/v1/mods/301/files/7/dependencies?index=0&pageSize=50": {
+      data: [],
+      pagination: { index: 0, pageSize: 50, totalCount: 0 },
+    },
     "https://www.curseforge.com/api/v1/mods/301/files/7/download": new Response(bytes),
   });
   setFetch(fetch);

@@ -1,0 +1,51 @@
+{
+  "data": [
+    { "id": 13376, "name": "Ace3", "type": "EmbeddedLibrary", "slug": "ace3" },
+    {
+      "id": 15049,
+      "name": "CallbackHandler-1.0",
+      "type": "EmbeddedLibrary",
+      "slug": "callbackhandler"
+    },
+    {
+      "id": 94348,
+      "name": "HereBeDragons",
+      "type": "EmbeddedLibrary",
+      "slug": "herebedragons"
+    },
+    { "id": 14273, "name": "LibCompress", "type": "EmbeddedLibrary", "slug": "libcompress" },
+    {
+      "id": 15552,
+      "name": "LibDBIcon-1.0",
+      "type": "EmbeddedLibrary",
+      "slug": "libdbicon-1-0"
+    },
+    {
+      "id": 20113,
+      "name": "LibDataBroker-1.1",
+      "type": "EmbeddedLibrary",
+      "slug": "libdatabroker-1-1"
+    },
+    {
+      "id": 14320,
+      "name": "LibSharedMedia-3.0",
+      "type": "EmbeddedLibrary",
+      "slug": "libsharedmedia-3-0"
+    },
+    { "id": 14328, "name": "LibStub", "type": "EmbeddedLibrary", "slug": "libstub" },
+    {
+      "id": 268264,
+      "name": "LibUIDropDownMenu",
+      "type": "EmbeddedLibrary",
+      "slug": "libuidropdownmenu"
+    },
+    { "id": 1696795, "name": "QuestieDB", "type": "RequiredDependency", "slug": "questiedb" },
+    {
+      "id": 1695789,
+      "name": "QuestieTrace",
+      "type": "RequiredDependency",
+      "slug": "questietrace"
+    }
+  ],
+  "pagination": { "index": 0, "pageSize": 50, "totalCount": 11 }
+}

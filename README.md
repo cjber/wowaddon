@@ -56,6 +56,15 @@ run would give, such as `unmanaged`, but leaves the manifest, state and AddOns f
 `--no-install`), so an add that fails or is stopped by an `unmanaged` folder can be rerun as is or
 with `--adopt`.
 
+A CurseForge file can name required dependencies, such as a shared core library. `add` and `sync`
+install every required dependency the manifest does not track yet as a normal `cf:<id>` manifest
+entry, then recurse through that dependency's own requirements; a dependency seen earlier in the
+run stops a cycle. A dependency whose folders another tracked addon already installed is not
+added again. Optional and other dependency relations are ignored. `--dry-run` reports the
+dependencies it would add and writes nothing, and the `add` and `sync` JSON output carries them as
+`dependencies`. `check` lists a tracked addon whose required dependency is neither tracked nor
+installed as `missingDependencies`.
+
 `check` judges from release info and local folders and downloads only as a last resort. A missing
 addon shows as `unmanaged` (or `dev`) when an untracked folder's TOC carries its project ID
 (`X-Curse-Project-ID`, `X-WoWI-ID`, `X-Wago-ID`) or the source lists that folder for it (CurseForge

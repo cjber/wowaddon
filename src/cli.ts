@@ -73,14 +73,16 @@ const specs: Record<string, CommandSpec> = {
       "dry-run": dryRun,
       "no-backup": { help: "skip the WTF snapshot taken before the first change" },
     },
-    output: "{ ...envelope, dryRun: boolean, backup: string | null, addons: Row[] }",
+    output:
+      "{ ...envelope, dryRun: boolean, backup: string | null, addons: Row[], dependencies: Row[] }",
   },
   check: {
     args: "[<id|ref>...]",
     summary:
-      "report what sync would do; installs nothing. A missing addon is unmanaged (or dev) when an untracked folder's TOC carries its project ID or the source lists that folder for it; only a same-named folder neither settles is downloaded to check. A folder named unlike the addon that the source does not list is missed, and an update is judged from the release alone",
+      "report what sync would do; installs nothing. A missing addon is unmanaged (or dev) when an untracked folder's TOC carries its project ID or the source lists that folder for it; only a same-named folder neither settles is downloaded to check. A folder named unlike the addon that the source does not list is missed, and an update is judged from the release alone. A required CurseForge dependency neither tracked nor installed is listed too",
     flags: {},
-    output: "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[] }",
+    output:
+      "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[], missingDependencies: { entry: string, dependency: string }[] }",
   },
   add: {
     args: "<ref|url> | <kind> <ref>",
@@ -92,7 +94,7 @@ const specs: Record<string, CommandSpec> = {
       adopt,
       "dry-run": dryRun,
     },
-    output: "{ ...envelope, dryRun: boolean, addon: Row }",
+    output: "{ ...envelope, dryRun: boolean, addon: Row, dependencies: Row[] }",
   },
   remove: {
     args: "<id|ref>",
@@ -250,7 +252,7 @@ function schema() {
     output: {
       envelope:
         "{ schemaVersion: number, command: string, flavor: 'era' | 'forever', addonsDir: string }",
-      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note? }, status, message?, code?, devTag?: string (the release tag a dev build is based on) }",
+      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note?, requires?: string[] }, status, message?, code?, devTag?: string (the release tag a dev build is based on), dependencies?: Row[] (required dependencies this operation added), missingDependencies?: string[] (required cf:<id> dependencies neither tracked nor installed) }",
       error:
         "{ schemaVersion, command, error: { code: string, message: string } } on stdout, with a non-zero exit",
       Listing:
@@ -622,11 +624,15 @@ const commands: Record<string, CommandHandler> = {
       signal,
       onProgress: logProgress,
     });
+    const dependencies = rows.flatMap((row) => row.dependencies ?? []);
     if (backup) warn(`Backed up WTF to ${backup}`);
     return {
-      data: { dryRun, backup: backup ?? null, addons: rows },
-      lines: rows.map(dryRun ? formatListLine : formatResultLine),
-      code: summarizeExit(rows),
+      data: { dryRun, backup: backup ?? null, addons: rows, dependencies },
+      lines: [
+        ...rows.map(dryRun ? formatListLine : formatResultLine),
+        ...dependencies.map(dryRun ? formatListLine : formatResultLine),
+      ],
+      code: summarizeExit([...rows, ...dependencies]),
     };
   },
 
@@ -635,6 +641,12 @@ const commands: Record<string, CommandHandler> = {
     const rows = await listRows(ctx, { refresh: true, ids: positionals, signal });
     const updates = rows.filter((row) => row.status === "missing" || row.status === "update");
     const shown = rows.filter((row) => row.status !== "current");
+    const missingDependencies = rows.flatMap((row) =>
+      (row.missingDependencies ?? []).map((dependency) => ({
+        entry: row.entry.id,
+        dependency,
+      })),
+    );
     const untracked = positionals.length
       ? []
       : (await listUntracked(ctx)).map(({ folder, title }) => ({
@@ -642,9 +654,17 @@ const commands: Record<string, CommandHandler> = {
           ...(title ? { title } : {}),
         }));
     return {
-      data: { updates: updates.length, addons: rows, untracked },
+      data: { updates: updates.length, addons: rows, untracked, missingDependencies },
       lines: [
-        ...(shown.length ? shown.map(formatListLine) : [`all ${rows.length} addons are current`]),
+        ...(shown.length
+          ? shown.map(formatListLine)
+          : missingDependencies.length
+            ? []
+            : [`all ${rows.length} addons are current`]),
+        ...missingDependencies.map(
+          (item) =>
+            `MISSING ${item.entry} requires ${item.dependency}: add it with wowaddon add ${item.dependency}`,
+        ),
         ...untracked.map(
           (item) =>
             `UNTRACKED ${item.folder}${item.title ? ` (${item.title})` : ""}: wowaddon adopt takes it over`,
@@ -666,10 +686,14 @@ const commands: Record<string, CommandHandler> = {
       signal,
       onProgress: logProgress,
     });
+    const dependencies = row.dependencies ?? [];
     return {
-      data: { dryRun, addon: row },
-      lines: [dryRun ? formatListLine(row) : formatResultLine(row)],
-      code: summarizeExit([row]),
+      data: { dryRun, addon: row, dependencies },
+      lines: [
+        dryRun ? formatListLine(row) : formatResultLine(row),
+        ...dependencies.map(dryRun ? formatListLine : formatResultLine),
+      ],
+      code: summarizeExit([row, ...dependencies]),
     };
   },
 

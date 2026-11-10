@@ -253,6 +253,8 @@ test("CurseForge info names the newest file when the project's latestFiles lags 
         ],
         pagination: { totalCount: 1 },
       },
+      "https://www.curseforge.com/api/v1/mods/334372/files/9500000/dependencies?index=0&pageSize=50":
+        { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } },
       "https://www.curseforge.com/api/v1/mods/334372/files/9500000/change-log": changelog,
     }).fetch,
   );
