@@ -151,6 +151,13 @@ async function filesFrom(
       ? `https://api.curseforge.com/v1/mods/${id}/files?gameVersionTypeId=${flavors[ctx.flavor].cfType}&index=${page * 50}&pageSize=50`
       : `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=${page}&pageSize=50&sort=dateCreated&sortDescending=true`;
     const response = await requestJson<FilesPage>(url, options);
+    // A project with no public files yet answers {"data":[],"pagination":{}}: zero files, not an error.
+    if (
+      Array.isArray(response.data) &&
+      response.data.length === 0 &&
+      response.pagination?.totalCount === undefined
+    )
+      return [...files.values()];
     if (
       !Array.isArray(response.data) ||
       !Number.isSafeInteger(response.pagination?.totalCount) ||

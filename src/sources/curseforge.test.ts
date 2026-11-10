@@ -109,6 +109,12 @@ test("no matching build names Classic Era", async () => {
     "No Forever build on CurseForge (latest is Classic Era)",
   );
 });
+test("a project with no public files is no-build, never unreachable", async () => {
+  setFetch(routeFetch({ [filesUrl()]: { data: [], pagination: {} } }).fetch);
+  await expect(resolveCurseforge(fixture.ctx, "1708506")).rejects.toMatchObject({
+    code: "NO_BUILD",
+  });
+});
 test("slug resolution records numeric cfwidget ID and hits cache thereafter", async () => {
   const routes = routeFetch({ "https://api.cfwidget.com/wow/addons/auctionator": widget });
   setFetch(routes.fetch);

@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   for. A symlink or checkout without that version form is untouched as before. Rows carry
   `devTag` in JSON.
 
+### Fixed
+
+- Adding a CurseForge project that has no public files yet says there is no build, instead of
+  claiming CurseForge could not be reached.
+
 ## [2.1.7] - 2026-11-05
 
 ### Fixed
