@@ -158,6 +158,63 @@ test("add, local list, unchanged sync, and remove use the service contract", asy
   expect((await readState(fixture.ctx)).addons).toEqual({});
   expect(await listRows(fixture.ctx, { refresh: false })).toEqual([]);
 });
+test("the five Forever addons that bundle ForeverCore all sync and share it", async () => {
+  const addons = [
+    { id: 1705762, folder: "Tweaks Forever" },
+    { id: 1708506, folder: "SkillUp Forever" },
+    { id: 1705879, folder: "Legacy Forever" },
+    { id: 1786835, folder: "Commissions" },
+    { id: 1794367, folder: "Field Guide" },
+  ];
+  const routes: Record<string, unknown> = {};
+  for (const { id, folder } of addons) {
+    const fileId = id + 1_000_000;
+    const bytes = await zip({
+      "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## Version: 2.0.2\n",
+      "ForeverCore/marker": "core",
+      [`${folder}/${folder}.toc`]: "## Interface: 16001\n## Version: 2.0.2\n",
+      [`${folder}/marker`]: "addon",
+    });
+    routes[
+      `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true`
+    ] = {
+      data: [
+        {
+          id: fileId,
+          projectId: id,
+          fileName: `${folder.replaceAll(" ", "")}.zip`,
+          gameVersionTypeIds: [88568],
+          gameVersions: ["1.60.0"],
+          releaseType: 1,
+          dateCreated: "2026-11-10",
+        },
+      ],
+      pagination: { totalCount: 1 },
+    };
+    routes[
+      `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/dependencies?index=0&pageSize=50`
+    ] = { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } };
+    routes[`https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/download`] = new Response(
+      bytes,
+    );
+  }
+  setFetch(routeFetch(routes).fetch);
+  await writeFile(manifestPath(fixture.ctx), addons.map((addon) => `cf ${addon.id}\n`).join(""));
+  const { rows } = await syncAddons(fixture.ctx, {});
+  expect(rows.map((row) => row.status)).toEqual(Array(addons.length).fill("current"));
+  expect(rows.every((row) => row.installed?.folders.includes("ForeverCore"))).toBe(true);
+  const state = await readState(fixture.ctx);
+  for (const { id } of addons) expect(state.addons[`cf:${id}`].folders).toContain("ForeverCore");
+  expect(await readdir(fixture.ctx.addonsDir)).toContain("ForeverCore");
+  expect(
+    (await listRows(fixture.ctx, { refresh: false })).every(
+      (row) => row.sharedFolders?.[0]?.folder === "ForeverCore",
+    ),
+  ).toBe(true);
+  expect((await listRows(fixture.ctx, { refresh: false }))[0].sharedFolders?.[0]?.owners).toEqual(
+    addons.map((addon) => `cf:${addon.id}`),
+  );
+});
 test("an add stopped by an unmanaged folder leaves the manifest alone, so --adopt can retry it", async () => {
   await mkdir(join(fixture.ctx.addonsDir, "Foo"));
   await installRoutes();

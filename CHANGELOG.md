@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A folder bundled in several addons, such as `ForeverCore`, `LibStub` or Ace3, no longer makes
+  every addon after the first fail with `OWNED_BY_OTHER`. Each owner installs and updates, the copy
+  with the newest TOC `## Version` stays on disk, and the folder is removed only with its last
+  owner. `check` and `list` rows name the other owners as `sharedFolders`.
+
 ## [2.3.0] - 2026-11-10
 
 ### Added

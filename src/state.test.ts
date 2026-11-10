@@ -33,7 +33,7 @@ test("destination mismatch blocks", async () => {
   );
   await expect(readState(fixture.ctx)).rejects.toMatchObject({ code: "STATE_DESTINATION" });
 });
-test("unsafe folders and case-insensitive ownership duplicates block", async () => {
+test("unsafe folders and case-insensitive duplicates in one addon block", async () => {
   const state = await readState(fixture.ctx);
   state.addons["cf:1"] = {
     version: "v1",
@@ -44,4 +44,21 @@ test("unsafe folders and case-insensitive ownership duplicates block", async () 
   await expect(writeState(fixture.ctx, state)).rejects.toMatchObject({ code: "STATE_CORRUPT" });
   state.addons["cf:1"].folders = ["Foo", "foo"];
   await expect(writeState(fixture.ctx, state)).rejects.toMatchObject({ code: "STATE_CORRUPT" });
+});
+test("state loads and saves a folder shared by several addons", async () => {
+  const state = await readState(fixture.ctx);
+  state.addons["cf:1"] = {
+    version: "v1",
+    versionKey: "1",
+    folders: ["ForeverCore"],
+    installedAt: "now",
+  };
+  state.addons["cf:2"] = {
+    version: "v2",
+    versionKey: "2",
+    folders: ["ForeverCore", "Other"],
+    installedAt: "now",
+  };
+  await writeState(fixture.ctx, state);
+  expect(await readState(fixture.ctx)).toEqual(state);
 });

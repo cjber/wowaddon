@@ -56,6 +56,9 @@ async function download(folders = ["Foo"]) {
     files[`${name}/${name}.toc`] = "## Interface: 16001";
     files[`${name}/marker`] = "new";
   }
+  return downloadFiles(files);
+}
+async function downloadFiles(files: Record<string, string>) {
   const bytes = await zip(files);
   let calls = 0;
   setFetch(async (url) => {
@@ -64,6 +67,12 @@ async function download(folders = ["Foo"]) {
     return new Response(bytes);
   });
   return () => calls;
+}
+function addonFiles(folder: string, version: string, marker = "new") {
+  return {
+    [`${folder}/${folder}.toc`]: `## Interface: 16001\n## Version: ${version}\n`,
+    [`${folder}/marker`]: marker,
+  };
 }
 async function devLink(name: string, version?: string) {
   const development = join(fixture.root, `dev-${name}`);
@@ -215,17 +224,147 @@ test("unowned collision requires adopt; adopt replaces and owns", async () => {
   expect(await contents("Foo")).toBe("new");
   expect((await readState(fixture.ctx)).addons[entry.id].folders).toEqual(["Foo"]);
 });
-test("ownership conflict cannot be overridden with adopt", async () => {
-  await folder("Foo");
-  state.addons["cf:123"] = installed();
-  await writeState(fixture.ctx, state);
-  await download();
+const legacy: Entry = { id: "gh:owner/legacy", kind: "gh", ref: "owner/legacy" };
+const tweaks: Entry = { id: "gh:owner/tweaks", kind: "gh", ref: "owner/tweaks" };
+test("a folder several addons ship is installed by each, newest copy winning", async () => {
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.0.2", "legacy"),
+    ...addonFiles("ForeverCore", "2.0.2", "core-old"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.0.2", versionKey: "1" }),
+  );
+  await downloadFiles({
+    ...addonFiles("Tweaks", "2.5.1", "tweaks"),
+    ...addonFiles("ForeverCore", "2.5.1", "core-new"),
+  });
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, tweaks, { ...release, version: "v2.5.1", versionKey: "1" }),
+  );
+  expect(row.status).toBe("current");
+  expect((await readState(fixture.ctx)).addons[tweaks.id].folders).toEqual([
+    "ForeverCore",
+    "Tweaks",
+  ]);
+  expect(await contents("ForeverCore")).toBe("core-new");
+  expect(
+    await readFile(join(fixture.ctx.addonsDir, "ForeverCore/ForeverCore.toc"), "utf8"),
+  ).toContain("## Version: 2.5.1");
+  expect(await contents("Legacy")).toBe("legacy");
+});
+test("an older shared copy never overwrites the newer one, and a newer update does", async () => {
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.0.2", "legacy"),
+    ...addonFiles("ForeverCore", "2.0.2", "core-old"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.0.2", versionKey: "1" }),
+  );
+  await downloadFiles({
+    ...addonFiles("Tweaks", "2.5.1", "tweaks"),
+    ...addonFiles("ForeverCore", "2.5.1", "core-new"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, tweaks, { ...release, version: "v2.5.1", versionKey: "1" }),
+  );
+
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.1.0", "legacy-updated"),
+    ...addonFiles("ForeverCore", "2.4.0", "core-older"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.1.0", versionKey: "2" }),
+  );
+  expect(await contents("ForeverCore")).toBe("core-new");
+  expect(
+    await readFile(join(fixture.ctx.addonsDir, "ForeverCore/ForeverCore.toc"), "utf8"),
+  ).toContain("## Version: 2.5.1");
+  expect(await contents("Legacy")).toBe("legacy-updated");
+
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.2.0", "legacy-newer"),
+    ...addonFiles("ForeverCore", "2.6.0", "core-newer"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.2.0", versionKey: "3" }),
+  );
+  expect(await contents("ForeverCore")).toBe("core-newer");
+  expect(
+    await readFile(join(fixture.ctx.addonsDir, "ForeverCore/ForeverCore.toc"), "utf8"),
+  ).toContain("## Version: 2.6.0");
+});
+test("a shared folder is removed only when its last owner goes", async () => {
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.0.2", "legacy"),
+    ...addonFiles("ForeverCore", "2.0.2", "core"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.0.2", versionKey: "1" }),
+  );
+  await downloadFiles({
+    ...addonFiles("Tweaks", "2.5.1", "tweaks"),
+    ...addonFiles("ForeverCore", "2.5.1", "core-new"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, tweaks, { ...release, version: "v2.5.1", versionKey: "1" }),
+  );
+
+  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, legacy.id));
+  expect((await readdir(fixture.ctx.addonsDir)).sort()).toEqual(["ForeverCore", "Tweaks"]);
+  expect((await readState(fixture.ctx)).addons[tweaks.id].folders).toEqual([
+    "ForeverCore",
+    "Tweaks",
+  ]);
+
+  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, tweaks.id));
+  expect(await readdir(fixture.ctx.addonsDir)).toEqual([]);
+  expect((await readState(fixture.ctx)).addons).toEqual({});
+});
+test("a failed shared-folder update restores both copies and the previous state", async () => {
+  await downloadFiles({
+    ...addonFiles("Legacy", "2.0.2", "legacy"),
+    ...addonFiles("ForeverCore", "2.0.2", "core-old"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, legacy, { ...release, version: "v2.0.2", versionKey: "1" }),
+  );
+  await downloadFiles({
+    ...addonFiles("Tweaks", "2.5.1", "tweaks"),
+    ...addonFiles("ForeverCore", "2.5.1", "core-new"),
+  });
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, tweaks, { ...release, version: "v2.5.1", versionKey: "1" }),
+  );
+  const before = await readState(fixture.ctx);
+
+  await downloadFiles({
+    ...addonFiles("Tweaks", "2.6.0", "tweaks-new"),
+    ...addonFiles("ForeverCore", "2.6.0", "core-newer"),
+  });
+  let calls = 0;
   await expect(
     withInstallLock(fixture.ctx, (current) =>
-      installAddon(fixture.ctx, current, entry, release, { adopt: true }),
+      installAddon(
+        fixture.ctx,
+        current,
+        tweaks,
+        { ...release, version: "v2.6.0", versionKey: "2" },
+        {
+          rename: async (from, to) => {
+            if (++calls === 3) throw new Error("injected shared update failure");
+            await rename(from, to);
+          },
+        },
+      ),
     ),
-  ).rejects.toMatchObject({ code: "OWNED_BY_OTHER" });
-  expect(await contents("Foo")).toBe("old");
+  ).rejects.toThrow("injected shared update failure");
+  expect(await contents("ForeverCore")).toBe("core-new");
+  expect(
+    await readFile(join(fixture.ctx.addonsDir, "ForeverCore/ForeverCore.toc"), "utf8"),
+  ).toContain("## Version: 2.5.1");
+  expect(await contents("Tweaks")).toBe("tweaks");
+  expect(await readState(fixture.ctx)).toEqual(before);
+  expect(await readdir(dirname(fixture.ctx.addonsDir))).toEqual(["AddOns"]);
 });
 test("rollback reverses completed renames after injected mid-swap failure", async () => {
   await folder("Foo");

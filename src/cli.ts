@@ -255,7 +255,7 @@ function schema() {
     output: {
       envelope:
         "{ schemaVersion: number, command: string, flavor: 'era' | 'forever', addonsDir: string }",
-      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note?, requires?: string[] }, status, message?, code?, devTag?: string (the release tag a dev build is based on), dependencies?: Row[] (required dependencies this operation added), missingDependencies?: string[] (required cf:<id> dependencies neither tracked nor installed) }",
+      Row: "{ entry: { id, kind, ref, note? }, installed?: { version, versionKey, folders, installedAt }, latest?: { version, versionKey, url, archive, note?, requires?: string[] }, status, message?, code?, devTag?: string (the release tag a dev build is based on), dependencies?: Row[] (required dependencies this operation added), missingDependencies?: string[] (required cf:<id> dependencies neither tracked nor installed), sharedFolders?: { folder, owners: string[] }[] (folders another installed addon also ships) }",
       error:
         "{ schemaVersion, command, error: { code: string, message: string } } on stdout, with a non-zero exit",
       Listing:
@@ -350,6 +350,10 @@ function formatListLine(row: Row): string {
   const parts = [row.status.toUpperCase().padEnd(9), row.entry.id, name];
   if (installedVersion) parts.push(installedVersion);
   if (latestVersion && latestVersion !== installedVersion) parts.push(`-> ${latestVersion}`);
+  for (const shared of row.sharedFolders ?? []) {
+    const others = shared.owners.filter((owner) => owner !== row.entry.id);
+    if (others.length) parts.push(`shared ${shared.folder} with ${others.join(", ")}`);
+  }
   if (row.message) parts.push(`(${row.message})`);
   return parts.join(" ");
 }
