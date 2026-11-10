@@ -59,6 +59,7 @@ export async function openContext(opts: {
   return openConfiguredContext(opts);
 }
 export { BACKGROUND_COMMAND, startBackgroundChecks, updateNotice } from "./background";
+export { keyProblems } from "./http";
 // The detached worker's body: the self check, and a full refresh that caches every release.
 export function runBackgroundChecks(ctx: Context, keys: string[]): Promise<void> {
   return runBackground(ctx, keys, (worker) => listRows(worker, { refresh: true }));

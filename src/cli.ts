@@ -6,10 +6,12 @@ import {
   adoptAddons,
   BACKGROUND_COMMAND,
   findAddons,
+  keyProblems,
   listCategories,
   listRows,
   listUntracked,
   openContext,
+  parseRef,
   type Query,
   type Removal,
   removeAddon,
@@ -82,19 +84,20 @@ const specs: Record<string, CommandSpec> = {
       "report what sync would do; installs nothing. A missing addon is unmanaged (or dev) when an untracked folder's TOC carries its project ID or the source lists that folder for it; only a same-named folder neither settles is downloaded to check. A folder named unlike the addon that the source does not list is missed, and an update is judged from the release alone. A required CurseForge dependency neither tracked nor installed is listed too",
     flags: {},
     output:
-      "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[], missingDependencies: { entry: string, dependency: string }[] }",
+      "{ ...envelope, updates: number, addons: Row[], untracked: { folder, title? }[], missingDependencies: { entry: string, dependency: string }[], keyProblems: KeyProblem[] }",
   },
   add: {
-    args: "<ref|url> | <kind> <ref>",
+    args: "<ref|url>... | <kind> <ref>",
     summary:
-      "install an addon and add it to the manifest; a failed add leaves the manifest as it was",
+      "install one or more addons and add them to the manifest; a failed add leaves the manifest as it was",
     flags: {
       note: { help: "manifest comment for the addon", value: "TEXT" },
       "no-install": { help: "only write the manifest line" },
       adopt,
       "dry-run": dryRun,
     },
-    output: "{ ...envelope, dryRun: boolean, addon: Row, dependencies: Row[] }",
+    output:
+      "{ ...envelope, dryRun: boolean, addon: Row (the first reference), addons: Row[], dependencies: Row[] }",
   },
   remove: {
     args: "<id|ref>",
@@ -264,6 +267,8 @@ function schema() {
       Category: "{ kind, id, name, parent?, count? }",
       Match:
         "{ entry, folders: string[], matchedBy: 'manifest' | 'wowup' | 'toc' | 'title', inManifest: boolean, conflicts: string[] }",
+      KeyProblem:
+        "{ source: 'curseforge', status: 401 | 403, file: string (the cf_token file to replace), message: string }",
     },
     sources: sourceNotes,
     statuses,
@@ -436,6 +441,40 @@ function discoveryQuery(
       allFlavors: Boolean(flags["all-flavors"]),
     },
     sources: sources as SourceKind[] | undefined,
+  };
+}
+// `add cf 123` keeps the two-argument form, so a list starts only when the first argument is a
+// complete reference: a source prefix (cf:, wowi:, wago:, tukui:, gh:) or OWNER/REPO. parseRef
+// accepts a bare legacy name or numeric ID too, which is exactly what the two-argument form needs.
+function fullRef(input: string): boolean {
+  const text = input.trim();
+  if (!text.includes(":") && !text.includes("/")) return false;
+  try {
+    parseRef(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function addInputs(positionals: string[]): string[] {
+  if (positionals.length > 1 && fullRef(positionals[0])) return positionals;
+  if (positionals.length > 2) usageError(`usage: ${usage("add")}`);
+  return [positionals.join(" ")];
+}
+// A failed add in a list still gets its own row, so the rest of the list is attempted and reported.
+function failedAdd(input: string, error: unknown): Row {
+  let entry: Row["entry"];
+  try {
+    const parsed = parseRef(input);
+    entry = { ...parsed, id: `${parsed.kind}:${parsed.ref}` };
+  } catch {
+    entry = { id: input, kind: "cf", ref: input };
+  }
+  return {
+    entry,
+    status: error instanceof WowaddonError && error.code === "UNMANAGED" ? "unmanaged" : "error",
+    message: error instanceof Error ? error.message : "Addon operation failed.",
+    code: error instanceof WowaddonError ? error.code : "ERROR",
   };
 }
 const compact = (n: number | null) =>
@@ -653,8 +692,17 @@ const commands: Record<string, CommandHandler> = {
           folder,
           ...(title ? { title } : {}),
         }));
+    // A configured CurseForge key the API itself rejected: name the key file, once, rather than
+    // letting the keyless fallback hide a key that is never used.
+    const problems = await keyProblems(ctx);
     return {
-      data: { updates: updates.length, addons: rows, untracked, missingDependencies },
+      data: {
+        updates: updates.length,
+        addons: rows,
+        untracked,
+        missingDependencies,
+        keyProblems: problems,
+      },
       lines: [
         ...(shown.length
           ? shown.map(formatListLine)
@@ -669,6 +717,7 @@ const commands: Record<string, CommandHandler> = {
           (item) =>
             `UNTRACKED ${item.folder}${item.title ? ` (${item.title})` : ""}: wowaddon adopt takes it over`,
         ),
+        ...problems.map((problem) => `WARN ${problem.message}`),
       ],
       code: summarizeExit(rows),
     };
@@ -678,22 +727,36 @@ const commands: Record<string, CommandHandler> = {
     const { flags, positionals } = splitFlags("add", args);
     if (!positionals.length) usageError(`usage: ${usage("add")}`);
     const dryRun = Boolean(flags["dry-run"]);
-    const row = await addAddon(ctx, positionals.join(" "), {
+    const inputs = addInputs(positionals);
+    const opts = {
       note: typeof flags.note === "string" ? flags.note : undefined,
       install: !flags["no-install"],
       adopt: Boolean(flags.adopt),
       dryRun,
       signal,
       onProgress: logProgress,
-    });
-    const dependencies = row.dependencies ?? [];
+    };
+    const rows: Row[] = [];
+    const dependencies: Row[] = [];
+    for (const input of inputs) {
+      let row: Row;
+      try {
+        row = await addAddon(ctx, input, opts);
+      } catch (error) {
+        // One reference keeps its typed error envelope; a list reports the failure and carries on.
+        if (inputs.length === 1) throw error;
+        if (error instanceof WowaddonError && error.code === "ABORTED") throw error;
+        row = failedAdd(input, error);
+      }
+      rows.push(row);
+      dependencies.push(...(row.dependencies ?? []));
+    }
+    const line = (row: Row) =>
+      dryRun && row.status !== "error" ? formatListLine(row) : formatResultLine(row);
     return {
-      data: { dryRun, addon: row, dependencies },
-      lines: [
-        dryRun ? formatListLine(row) : formatResultLine(row),
-        ...dependencies.map(dryRun ? formatListLine : formatResultLine),
-      ],
-      code: summarizeExit([row, ...dependencies]),
+      data: { dryRun, addon: rows[0], addons: rows, dependencies },
+      lines: [...rows.map(line), ...dependencies.map(dryRun ? formatListLine : formatResultLine)],
+      code: summarizeExit([...rows, ...dependencies]),
     };
   },
 
@@ -805,6 +868,9 @@ export async function runCli(argv: string[]): Promise<number | undefined> {
     for (const notice of ctx.notices) warn(notice);
     try {
       const outcome = await commands[command](ctx, parsed.rest, abortController.signal);
+      // check reports this with its own output and JSON; every other command warns once here.
+      if (command !== "check")
+        for (const problem of await keyProblems(ctx)) warn(`WARN ${problem.message}`);
       if (parsed.json)
         console.log(
           JSON.stringify({

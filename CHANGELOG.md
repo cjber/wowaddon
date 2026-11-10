@@ -16,6 +16,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dependencies and writes nothing. `add` and `sync` JSON gains `dependencies`, and `check` reports
   a tracked addon's required dependency that is neither tracked nor installed as
   `missingDependencies`.
+- `add` takes several references, installing each in turn as `sync` does; a first argument that
+  is itself a complete reference (`cf:`, `gh:`, `wowi:`, `tukui:`, `wago:`, `OWNER/REPO` or a URL)
+  starts a list, while `add cf 327139` keeps the `<kind> <ref>` form. `add` JSON gains `addons`.
+
+### Fixed
+
+- A configured CurseForge key that `api.curseforge.com` rejects with HTTP 401 or 403 is reported
+  instead of being hidden by the keyless fallback. `check` lists it as `keyProblems`, naming the
+  `cf_token` file to replace, and every command prints the same warning once on stderr.
 
 ## [2.2.0] - 2026-11-10
 
