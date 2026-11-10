@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-10
+
 ### Added
 
 - `add` and `sync` install a CurseForge addon's required dependencies (the website's
