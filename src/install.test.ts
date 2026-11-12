@@ -19,11 +19,16 @@ import type { Entry, Installed, Release } from "./types";
 let fixture: Awaited<ReturnType<typeof tempContext>>;
 let state: State;
 const entry: Entry = { id: "gh:a/b", kind: "gh", ref: "a/b" };
+const cfEntry: Entry = { id: "cf:123", kind: "cf", ref: "123" };
 const release: Release = {
   version: "v2",
   versionKey: "2",
   url: "https://github.com/a/b/file.zip",
   archive: "package",
+};
+const cfRelease = {
+  ...release,
+  url: "https://www.curseforge.com/api/v1/mods/123/files/2/download",
 };
 const installed = (folders = ["Foo"], versionKey = "1"): Installed => ({
   version: "v1",
@@ -58,11 +63,11 @@ async function download(folders = ["Foo"]) {
   }
   return downloadFiles(files);
 }
-async function downloadFiles(files: Record<string, string>) {
+async function downloadFiles(files: Record<string, string>, expectedUrl = release.url) {
   const bytes = await zip(files);
   let calls = 0;
   setFetch(async (url) => {
-    expect(url).toBe(release.url);
+    expect(url).toBe(expectedUrl);
     calls++;
     return new Response(bytes);
   });
@@ -207,13 +212,16 @@ test("installs the requested addon while preserving a protected shared dependenc
     "## Interface: 16001\n## X-Curse-Project-ID: 1796337",
   );
   await mkdir(join(dependency, ".git"));
-  await downloadFiles({
-    "Foo/Foo.toc": "## Interface: 16001",
-    "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## X-Curse-Project-ID: 1796337",
-  });
+  await downloadFiles(
+    {
+      "Foo/Foo.toc": "## Interface: 16001",
+      "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## X-Curse-Project-ID: 1796337",
+    },
+    cfRelease.url,
+  );
   await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
   const row = await withInstallLock(fixture.ctx, (current) =>
-    installAddon(fixture.ctx, current, entry, release),
+    installAddon(fixture.ctx, current, cfEntry, cfRelease),
   );
   expect(row.status).toBe("current");
   expect(await readdir(join(fixture.ctx.addonsDir, "Foo"))).toContain("Foo.toc");
@@ -232,17 +240,19 @@ test("never replaces or removes a protected foreign dependency, even when newer"
     "## Interface: 16001\n## Version: 99\n## X-Curse-Project-ID: 1796337",
   );
   await mkdir(join(dependency, ".git"));
-  const cfEntry: Entry = { id: "gh:a/b", kind: "gh", ref: "a/b" };
-  const cfRelease = { ...release, version: "v99", versionKey: "99" };
-  await downloadFiles({
-    "Foo/Foo.toc": "## Interface: 16001",
-    "ForeverCore/ForeverCore.toc":
-      "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 123",
-    "ForeverCore/replaced": "must-not-land",
-  });
+  const newerRelease = { ...cfRelease, version: "v99", versionKey: "99" };
+  await downloadFiles(
+    {
+      "Foo/Foo.toc": "## Interface: 16001",
+      "ForeverCore/ForeverCore.toc":
+        "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 123",
+      "ForeverCore/replaced": "must-not-land",
+    },
+    cfRelease.url,
+  );
   await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
   await withInstallLock(fixture.ctx, (current) =>
-    installAddon(fixture.ctx, current, cfEntry, cfRelease),
+    installAddon(fixture.ctx, current, cfEntry, newerRelease),
   );
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
   expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
@@ -259,28 +269,36 @@ test("an existing addon can repair its missing primary beside a protected depend
   await writeFile(join(dependency, "ForeverCore.toc"), "## X-Curse-Project-ID: 1796337");
   await mkdir(join(dependency, ".git"));
   await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
-  await own(["Foo", "ForeverCore"]);
-  await download(["Foo"]);
+  state.addons[cfEntry.id] = installed(["Foo", "ForeverCore"]);
+  await writeState(fixture.ctx, state);
+  await downloadFiles(
+    {
+      "Foo/Foo.toc": "## Interface: 16001",
+      "ForeverCore/ForeverCore.toc":
+        "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 1796337",
+    },
+    cfRelease.url,
+  );
   const row = await withInstallLock(fixture.ctx, (current) =>
-    installAddon(fixture.ctx, current, entry, release),
+    installAddon(fixture.ctx, current, cfEntry, cfRelease),
   );
   expect(row.status).toBe("current");
   expect(await readFile(join(fixture.ctx.addonsDir, "Foo/Foo.toc"), "utf8")).toContain("Interface");
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
 });
 test("a gh primary with CurseForge metadata remains protected", async () => {
-  const primary = join(fixture.root, "dev-build/b");
+  const primary = join(fixture.root, "dev-build/UnrelatedFolder");
   await mkdir(primary, { recursive: true });
-  await writeFile(join(primary, "b.toc"), "## X-Curse-Project-ID: 1796337");
+  await writeFile(join(primary, "UnrelatedFolder.toc"), "## X-Curse-Project-ID: 1796337");
   await mkdir(join(primary, ".git"));
-  await symlink(primary, join(fixture.ctx.addonsDir, "b"));
-  await own(["b"]);
-  await download(["b"]);
+  await symlink(primary, join(fixture.ctx.addonsDir, "UnrelatedFolder"));
+  await own(["UnrelatedFolder"]);
+  await download(["UnrelatedFolder"]);
   const row = await withInstallLock(fixture.ctx, (current) =>
     installAddon(fixture.ctx, current, entry, release),
   );
   expect(row.status).toBe("dev");
-  expect((await lstat(join(fixture.ctx.addonsDir, "b"))).isSymbolicLink()).toBe(true);
+  expect((await lstat(join(fixture.ctx.addonsDir, "UnrelatedFolder"))).isSymbolicLink()).toBe(true);
 });
 test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");
