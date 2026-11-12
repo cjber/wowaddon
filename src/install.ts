@@ -404,9 +404,16 @@ async function preflight(
 ): Promise<boolean> {
   await assertRoot(ctx);
   const incomingSet = new Set(incoming.map((folder) => folder.toLowerCase()));
-  for (const folder of folders)
-    if (!(await replacement(ctx, replaceDev, folder)) && (await protectedFolder(ctx, folder)))
-      return false;
+  for (const folder of folders) {
+    if (!(await replacement(ctx, replaceDev, folder)) && (await protectedFolder(ctx, folder))) {
+      // A package may carry a shared dependency whose independently managed dev link must stay
+      // untouched. It is safe to leave that folder in place when its TOC identifies another addon;
+      // the requested addon folder is still protected by the normal guard.
+      const toc = await tocOf(ctx, folder);
+      const foreignCurseId = toc?.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1];
+      if (!foreignCurseId || id === `cf:${foreignCurseId}`) return false;
+    }
+  }
   const existing = new Map(
     (await readdir(ctx.addonsDir)).map((folder) => [folder.toLowerCase(), folder]),
   );
@@ -423,9 +430,22 @@ async function preflight(
       );
     const target = await info(join(ctx.addonsDir, folder));
     const replace = await replacement(ctx, replaceDev, folder);
-    if (target && !replace && !target.isDirectory())
+    const protectedToc =
+      target && (await protectedFolder(ctx, folder)) ? await tocOf(ctx, folder) : undefined;
+    const foreignProtected =
+      !!protectedToc &&
+      !!protectedToc.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1] &&
+      id !== `cf:${protectedToc.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1]}`;
+    if (target && !replace && !foreignProtected && !target.isDirectory())
       throw new WowaddonError("FOLDER_COLLISION", `${folder} is not an addon directory.`);
-    if (target && !replace && !state.addons[id]?.folders.includes(folder) && !shared && !adopt)
+    if (
+      target &&
+      !replace &&
+      !foreignProtected &&
+      !state.addons[id]?.folders.includes(folder) &&
+      !shared &&
+      !adopt
+    )
       throw new WowaddonError(
         "UNMANAGED",
         `${folder} is already installed outside wowaddon. Use --adopt to take it over.`,

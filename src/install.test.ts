@@ -198,6 +198,29 @@ test("unknown protected folder skips whole multi-folder addon after validation",
   expect(await contents("Foo")).toBe("old");
   expect(await readdir(fixture.ctx.addonsDir)).toEqual(["Foo"]);
 });
+test("installs the requested addon while preserving a protected shared dependency", async () => {
+  const dependency = join(fixture.root, "dev-build/ForeverCore");
+  await mkdir(dependency, { recursive: true });
+  await writeFile(join(dependency, "marker"), "core-dev");
+  await writeFile(
+    join(dependency, "ForeverCore.toc"),
+    "## Interface: 16001\n## X-Curse-Project-ID: 1796337",
+  );
+  await mkdir(join(dependency, ".git"));
+  await downloadFiles({
+    "Foo/Foo.toc": "## Interface: 16001",
+    "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## X-Curse-Project-ID: 1796337",
+  });
+  await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, release),
+  );
+  expect(row.status).toBe("current");
+  expect(await readdir(join(fixture.ctx.addonsDir, "Foo"))).toContain("Foo.toc");
+  expect(
+    await readFile(join(fixture.ctx.addonsDir, "ForeverCore", "ForeverCore.toc"), "utf8"),
+  ).toContain("1796337");
+});
 test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");
   await own();
