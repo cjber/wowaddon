@@ -96,6 +96,12 @@ const projectIdPattern = (entry: Entry) => {
   if (key && /^0+$/.test(entry.ref)) return undefined;
   return key ? new RegExp(`^\\s*##\\s*${key}\\s*:\\s*${entry.ref}\\s*$`, "im") : undefined;
 };
+async function foreignProtectedFolder(ctx: Context, id: string, folder: string): Promise<boolean> {
+  if (!(await protectedFolder(ctx, folder))) return false;
+  const toc = await tocOf(ctx, folder);
+  const foreignCurseId = toc?.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1];
+  return !!foreignCurseId && id !== `cf:${foreignCurseId}`;
+}
 async function tocOf(ctx: Context, folder: string): Promise<string | undefined> {
   const dir = join(ctx.addonsDir, folder);
   const file = (await readdir(dir).catch(() => [])).find((name) => tocMatchesFolder(name, folder));
@@ -190,6 +196,7 @@ export async function protection(
   let blocked = false;
   let dev: DevLink | undefined;
   for (const folder of installed.folders) {
+    if (await foreignProtectedFolder(ctx, entry.id, folder)) continue;
     const state = await folderProtection(ctx, folder);
     if (!state.symlink && !state.other) continue;
     guarded = true;
@@ -392,12 +399,6 @@ async function sharedCopyWins(
   const current = tocVersion((await tocOf(ctx, folder)) ?? "");
   if (!incoming || !current) return true;
   return releaseVersionAtLeast(incoming, current);
-}
-async function foreignProtectedFolder(ctx: Context, id: string, folder: string): Promise<boolean> {
-  if (!(await protectedFolder(ctx, folder))) return false;
-  const toc = await tocOf(ctx, folder);
-  const foreignCurseId = toc?.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1];
-  return !!foreignCurseId && id !== `cf:${foreignCurseId}`;
 }
 async function preflight(
   ctx: Context,

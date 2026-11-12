@@ -253,6 +253,21 @@ test("never replaces or removes a protected foreign dependency, even when newer"
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
   expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
 });
+test("an existing addon can repair its missing primary beside a protected dependency", async () => {
+  const dependency = join(fixture.root, "dev-build/ForeverCore");
+  await mkdir(dependency, { recursive: true });
+  await writeFile(join(dependency, "ForeverCore.toc"), "## X-Curse-Project-ID: 1796337");
+  await mkdir(join(dependency, ".git"));
+  await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
+  await own(["Foo", "ForeverCore"]);
+  await download(["Foo"]);
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, release),
+  );
+  expect(row.status).toBe("current");
+  expect(await readFile(join(fixture.ctx.addonsDir, "Foo/Foo.toc"), "utf8")).toContain("Interface");
+  expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
+});
 test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");
   await own();
