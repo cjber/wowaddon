@@ -1,4 +1,14 @@
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { type Archive, readArchive } from "./archive";
 import { isMissing } from "./config";
@@ -169,6 +179,8 @@ export interface Protection {
   dev?: DevLink;
   // Protected for a reason that cannot expire, such as a git checkout or worktree.
   blocked: boolean;
+  // Folders shared with another addon whose dev link this addon leaves in place.
+  sharedDevFolders?: string[];
 }
 async function devLinkIn(ctx: Context, folder: string): Promise<DevLink | undefined> {
   const target = await info(join(ctx.addonsDir, folder));
@@ -195,8 +207,12 @@ export async function protection(
   let guarded = false;
   let blocked = false;
   let dev: DevLink | undefined;
+  const sharedDevFolders: string[] = [];
   for (const folder of installed.folders) {
-    if (await foreignProtectedFolder(ctx, entry.id, folder)) continue;
+    if (await foreignProtectedFolder(ctx, entry.id, folder)) {
+      sharedDevFolders.push(folder);
+      continue;
+    }
     const state = await folderProtection(ctx, folder);
     if (!state.symlink && !state.other) continue;
     guarded = true;
@@ -207,7 +223,12 @@ export async function protection(
       else blocked = true;
     }
   }
-  return { protected: guarded, blocked, ...(dev ? { dev } : {}) };
+  return {
+    protected: guarded,
+    blocked,
+    ...(dev ? { dev } : {}),
+    ...(sharedDevFolders.length ? { sharedDevFolders } : {}),
+  };
 }
 export async function isProtected(
   ctx: Context,
@@ -216,9 +237,19 @@ export async function isProtected(
 ): Promise<boolean> {
   return (await protection(ctx, entry, installed)).protected;
 }
+// A real folder, or a dev link resolving to one, counts as present; a folder that is absent or
+// whose link has no target does not.
+async function directoryAt(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+}
 export async function foldersPresent(ctx: Context, installed: Installed): Promise<boolean> {
   for (const folder of installed.folders)
-    if (!(await info(join(ctx.addonsDir, folder)))?.isDirectory()) return false;
+    if (!(await directoryAt(join(ctx.addonsDir, folder)))) return false;
   return true;
 }
 export async function withInstallLock<T>(
@@ -328,6 +359,16 @@ export async function recoverPending(ctx: Context): Promise<void> {
 }
 export const DEV_SKIPPED =
   "dev link, skipped: to install a release here, remove the symlink or checkout, then run sync";
+export const sharedDevLinkNote = (folders: string[] | undefined): string | undefined => {
+  if (!folders?.length) return undefined;
+  return folders.length === 1
+    ? `shared ${folders[0]} is a dev link`
+    : `shared ${folders.join(", ")} are dev links`;
+};
+export const noteWithSharedDevLinks = (
+  note: string | undefined,
+  folders: string[] | undefined,
+): string | undefined => [note, sharedDevLinkNote(folders)].filter(Boolean).join("; ") || undefined;
 export const devWaiting = (tag: string) => `dev build of ${tag}, waiting for a newer release`;
 export const devReplaced = (tag: string, version: string) =>
   `dev build of ${tag} replaced by ${version}`;
@@ -602,9 +643,16 @@ export async function installAddon(
   };
   if (guard.protected && !replace) return skipDev();
   const present = !!installed && (await foldersPresent(ctx, installed));
+  const sharedDev = present ? guard.sharedDevFolders : undefined;
   if (present && !replace && installed?.versionKey === release.versionKey) {
     progress("skipped", "up to date");
-    return { entry, installed, latest: release, status: "current", message: "up to date" };
+    return {
+      entry,
+      installed,
+      latest: release,
+      status: "current",
+      message: noteWithSharedDevLinks("up to date", sharedDev),
+    };
   }
   if (!opts.archive) progress("downloading");
   const archive = opts.archive ?? (await readRelease(ctx, entry, release, opts.signal));
@@ -617,7 +665,10 @@ export async function installAddon(
       installed,
       latest: release,
       status: replace || present ? "update" : "missing",
-      message: replace ? devReplaced(replace.tag, release.version) : release.note,
+      message: noteWithSharedDevLinks(
+        replace ? devReplaced(replace.tag, release.version) : release.note,
+        sharedDev,
+      ),
       ...(replace ? { devTag: replace.tag } : {}),
     };
   }
@@ -631,7 +682,10 @@ export async function installAddon(
   };
   if (!(await transact(ctx, state, entry.id, archive, next, { ...opts, replaceDev: replace })))
     return skipDev();
-  const message = replace ? devReplaced(replace.tag, release.version) : release.note;
+  const message = noteWithSharedDevLinks(
+    replace ? devReplaced(replace.tag, release.version) : release.note,
+    sharedDev,
+  );
   progress("done", message);
   return {
     entry,

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `list` and `check` no longer report an addon as not installed when a folder it shares with
+  other addons, such as `ForeverCore`, is kept as a development link. The addon reads as
+  installed and the row says `shared ForeverCore is a dev link`; a folder that is really gone is
+  still reported as missing.
+
 ## [2.3.1] - 2026-11-12
 
 ### Fixed
