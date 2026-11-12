@@ -6,12 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-12
+
 ### Fixed
 
 - A folder bundled in several addons, such as `ForeverCore`, `LibStub` or Ace3, no longer makes
   every addon after the first fail with `OWNED_BY_OTHER`. Each owner installs and updates, the copy
   with the newest TOC `## Version` stays on disk, and the folder is removed only with its last
   owner. `check` and `list` rows name the other owners as `sharedFolders`.
+- A CurseForge addon that bundles a folder kept as another CurseForge addon's development link now installs.
+  A protected folder whose TOC names a different `## X-Curse-Project-ID` is left exactly as it is:
+  an incoming newer copy does not replace it and removing the addon does not take it, while the
+  addon's own protected folders are still never touched. Before, the whole addon was reported as
+  `dev` and skipped.
 
 ## [2.3.0] - 2026-11-10
 
