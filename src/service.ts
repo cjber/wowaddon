@@ -16,9 +16,11 @@ import {
   type InstallOptions,
   installAddon,
   isProtected,
+  noteWithSharedDevLinks,
   protection,
   readRelease,
   removeInstalled,
+  sharedDevLinkNote,
   withInstallLock,
 } from "./install";
 import { readManifest, writeManifest } from "./manifest";
@@ -113,11 +115,18 @@ async function statusRow(
   const guard = await protection(ctx, entry, installed);
   const dev = guard.dev && !guard.blocked ? guard.dev : undefined;
   if (guard.protected && !dev) return { entry, installed, status: "dev", message: DEV_SKIPPED };
-  const present = installed && (await foldersPresent(ctx, installed));
+  const present = !!installed && (await foldersPresent(ctx, installed));
+  const sharedDev = present ? guard.sharedDevFolders : undefined;
+  const sharedDevNote = sharedDevLinkNote(sharedDev);
   if (!release) {
     if (dev)
       return { entry, installed, status: "dev", message: devWaiting(dev.tag), devTag: dev.tag };
-    return { entry, installed, status: present ? "unknown" : "missing" };
+    return {
+      entry,
+      installed,
+      status: present ? "unknown" : "missing",
+      ...(sharedDevNote ? { message: sharedDevNote } : {}),
+    };
   }
   const resolved = await release();
   if (dev) {
@@ -148,7 +157,7 @@ async function statusRow(
       : installed.versionKey === resolved.versionKey
         ? "current"
         : "update",
-    message: resolved.note,
+    message: noteWithSharedDevLinks(resolved.note, sharedDev),
   };
 }
 function failure(entry: Entry, state: State, error: unknown): Row {

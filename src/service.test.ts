@@ -215,6 +215,70 @@ test("the five Forever addons that bundle ForeverCore all sync and share it", as
     addons.map((addon) => `cf:${addon.id}`),
   );
 });
+test("a shared folder kept as a dev link leaves its addons installed and says so", async () => {
+  const addons = [
+    { id: 1705879, folder: "Legacy Forever" },
+    { id: 1708506, folder: "SkillUp Forever" },
+  ];
+  const routes: Record<string, unknown> = {};
+  for (const { id, folder } of addons) {
+    const fileId = id + 1_000_000;
+    const bytes = await zip({
+      "ForeverCore/ForeverCore.toc":
+        "## Interface: 16001\n## Version: 2.0.2\n## X-Curse-Project-ID: 1796337\n",
+      "ForeverCore/marker": "core",
+      [`${folder}/${folder}.toc`]: "## Interface: 16001\n## Version: 2.0.2\n",
+      [`${folder}/marker`]: "addon",
+    });
+    routes[
+      `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true`
+    ] = {
+      data: [
+        {
+          id: fileId,
+          projectId: id,
+          fileName: `${folder.replaceAll(" ", "")}.zip`,
+          gameVersionTypeIds: [88568],
+          gameVersions: ["1.60.0"],
+          releaseType: 1,
+          dateCreated: "2026-11-10",
+        },
+      ],
+      pagination: { totalCount: 1 },
+    };
+    routes[
+      `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/dependencies?index=0&pageSize=50`
+    ] = { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } };
+    routes[`https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/download`] = new Response(
+      bytes,
+    );
+  }
+  setFetch(routeFetch(routes).fetch);
+  await writeFile(manifestPath(fixture.ctx), addons.map((addon) => `cf ${addon.id}\n`).join(""));
+  await syncAddons(fixture.ctx, {});
+  // The shared folder becomes a dev checkout of its own, as the issue describes.
+  const dev = join(fixture.root, "dev-build/ForeverCore");
+  await mkdir(dev, { recursive: true });
+  await writeFile(
+    join(dev, "ForeverCore.toc"),
+    "## Interface: 16001\n## Version: 1.8.0-dev+3fa2c1d\n## X-Curse-Project-ID: 1796337\n",
+  );
+  await rm(join(fixture.ctx.addonsDir, "ForeverCore"), { recursive: true });
+  await symlink(dev, join(fixture.ctx.addonsDir, "ForeverCore"));
+  const rows = await listRows(fixture.ctx, { refresh: false });
+  expect(rows.map((row) => row.status)).toEqual(["current", "current"]);
+  for (const row of rows) {
+    expect(row.message).toBe("shared ForeverCore is a dev link");
+    expect(row.sharedFolders).toEqual([
+      { folder: "ForeverCore", owners: addons.map((addon) => `cf:${addon.id}`) },
+    ]);
+  }
+  await rm(join(fixture.ctx.addonsDir, "ForeverCore"));
+  expect((await listRows(fixture.ctx, { refresh: false })).map((row) => row.status)).toEqual([
+    "missing",
+    "missing",
+  ]);
+});
 test("an add stopped by an unmanaged folder leaves the manifest alone, so --adopt can retry it", async () => {
   await mkdir(join(fixture.ctx.addonsDir, "Foo"));
   await installRoutes();
