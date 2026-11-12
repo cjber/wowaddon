@@ -196,7 +196,13 @@ export async function protection(
   let blocked = false;
   let dev: DevLink | undefined;
   for (const folder of installed.folders) {
-    if (await foreignProtectedFolder(ctx, entry.id, folder)) continue;
+    // Only CurseForge entries can identify a shared folder by its project tag. Other sources
+    // retain conservative primary-folder protection even when a package carries CF metadata.
+    if (
+      (await foreignProtectedFolder(ctx, entry.id, folder)) &&
+      (!impliedFolder(entry) || folderKey(folder) !== impliedFolder(entry))
+    )
+      continue;
     const state = await folderProtection(ctx, folder);
     if (!state.symlink && !state.other) continue;
     guarded = true;

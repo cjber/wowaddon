@@ -268,6 +268,20 @@ test("an existing addon can repair its missing primary beside a protected depend
   expect(await readFile(join(fixture.ctx.addonsDir, "Foo/Foo.toc"), "utf8")).toContain("Interface");
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
 });
+test("a gh primary with CurseForge metadata remains protected", async () => {
+  const primary = join(fixture.root, "dev-build/b");
+  await mkdir(primary, { recursive: true });
+  await writeFile(join(primary, "b.toc"), "## X-Curse-Project-ID: 1796337");
+  await mkdir(join(primary, ".git"));
+  await symlink(primary, join(fixture.ctx.addonsDir, "b"));
+  await own(["b"]);
+  await download(["b"]);
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, release),
+  );
+  expect(row.status).toBe("dev");
+  expect((await lstat(join(fixture.ctx.addonsDir, "b"))).isSymbolicLink()).toBe(true);
+});
 test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");
   await own();
