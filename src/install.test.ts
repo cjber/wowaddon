@@ -217,9 +217,38 @@ test("installs the requested addon while preserving a protected shared dependenc
   );
   expect(row.status).toBe("current");
   expect(await readdir(join(fixture.ctx.addonsDir, "Foo"))).toContain("Foo.toc");
+  expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
+  expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
   expect(
     await readFile(join(fixture.ctx.addonsDir, "ForeverCore", "ForeverCore.toc"), "utf8"),
   ).toContain("1796337");
+});
+test("never replaces or removes a protected foreign dependency, even when newer", async () => {
+  const dependency = join(fixture.root, "dev-build/ForeverCore");
+  await mkdir(dependency, { recursive: true });
+  await writeFile(join(dependency, "marker"), "core-dev");
+  await writeFile(
+    join(dependency, "ForeverCore.toc"),
+    "## Interface: 16001\n## Version: 99\n## X-Curse-Project-ID: 1796337",
+  );
+  await mkdir(join(dependency, ".git"));
+  const cfEntry: Entry = { id: "gh:a/b", kind: "gh", ref: "a/b" };
+  const cfRelease = { ...release, version: "v99", versionKey: "99" };
+  await downloadFiles({
+    "Foo/Foo.toc": "## Interface: 16001",
+    "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 123",
+    "ForeverCore/replaced": "must-not-land",
+  });
+  await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
+  await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, cfEntry, cfRelease),
+  );
+  expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
+  expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
+  expect(await contents("ForeverCore")).toBe("core-dev");
+  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, cfEntry.id));
+  expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
+  expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
 });
 test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");

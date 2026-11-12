@@ -393,6 +393,12 @@ async function sharedCopyWins(
   if (!incoming || !current) return true;
   return releaseVersionAtLeast(incoming, current);
 }
+async function foreignProtectedFolder(ctx: Context, id: string, folder: string): Promise<boolean> {
+  if (!(await protectedFolder(ctx, folder))) return false;
+  const toc = await tocOf(ctx, folder);
+  const foreignCurseId = toc?.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1];
+  return !!foreignCurseId && id !== `cf:${foreignCurseId}`;
+}
 async function preflight(
   ctx: Context,
   state: State,
@@ -409,9 +415,7 @@ async function preflight(
       // A package may carry a shared dependency whose independently managed dev link must stay
       // untouched. It is safe to leave that folder in place when its TOC identifies another addon;
       // the requested addon folder is still protected by the normal guard.
-      const toc = await tocOf(ctx, folder);
-      const foreignCurseId = toc?.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1];
-      if (!foreignCurseId || id === `cf:${foreignCurseId}`) return false;
+      if (!(await foreignProtectedFolder(ctx, id, folder))) return false;
     }
   }
   const existing = new Map(
@@ -430,12 +434,7 @@ async function preflight(
       );
     const target = await info(join(ctx.addonsDir, folder));
     const replace = await replacement(ctx, replaceDev, folder);
-    const protectedToc =
-      target && (await protectedFolder(ctx, folder)) ? await tocOf(ctx, folder) : undefined;
-    const foreignProtected =
-      !!protectedToc &&
-      !!protectedToc.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1] &&
-      id !== `cf:${protectedToc.match(/^\s*##\s*X-Curse-Project-ID\s*:\s*(\d+)\s*$/im)?.[1]}`;
+    const foreignProtected = target && (await foreignProtectedFolder(ctx, id, folder));
     if (target && !replace && !foreignProtected && !target.isDirectory())
       throw new WowaddonError("FOLDER_COLLISION", `${folder} is not an addon directory.`);
     if (
@@ -500,6 +499,9 @@ async function transact(
     };
     const incoming = new Set(archive.folders.map((folder) => folder.toLowerCase()));
     for (const folder of folders) {
+      // A protected foreign dependency is never a transaction operation, including removal
+      // and a newer incoming copy. Preflight permits the parent addon to proceed around it.
+      if (await foreignProtectedFolder(ctx, id, folder)) continue;
       const ships = incoming.has(folder.toLowerCase());
       const shared = otherOwners(state, id, folder).length > 0;
       // Another addon still ships a folder this one no longer does: keep the copy on disk.
