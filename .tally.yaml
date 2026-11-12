@@ -1,0 +1,4 @@
+# Credential metadata only. Unknown lifecycle facts remain visible as gaps.
+sources:
+  - github: cjber/wowaddon
+keys: []
