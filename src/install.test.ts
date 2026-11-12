@@ -236,7 +236,8 @@ test("never replaces or removes a protected foreign dependency, even when newer"
   const cfRelease = { ...release, version: "v99", versionKey: "99" };
   await downloadFiles({
     "Foo/Foo.toc": "## Interface: 16001",
-    "ForeverCore/ForeverCore.toc": "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 123",
+    "ForeverCore/ForeverCore.toc":
+      "## Interface: 16001\n## Version: 100\n## X-Curse-Project-ID: 123",
     "ForeverCore/replaced": "must-not-land",
   });
   await symlink(dependency, join(fixture.ctx.addonsDir, "ForeverCore"));
@@ -246,7 +247,9 @@ test("never replaces or removes a protected foreign dependency, even when newer"
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
   expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
   expect(await contents("ForeverCore")).toBe("core-dev");
-  await withInstallLock(fixture.ctx, (current) => removeInstalled(fixture.ctx, current, cfEntry.id));
+  await withInstallLock(fixture.ctx, (current) =>
+    removeInstalled(fixture.ctx, current, cfEntry.id),
+  );
   expect((await lstat(join(fixture.ctx.addonsDir, "ForeverCore"))).isSymbolicLink()).toBe(true);
   expect(await fs.readlink(join(fixture.ctx.addonsDir, "ForeverCore"))).toBe(dependency);
 });
