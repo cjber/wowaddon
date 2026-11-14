@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-11-14
+
 ### Fixed
 
 - Nested `<script>` or `<style>` markup no longer appears as content in addon descriptions and
