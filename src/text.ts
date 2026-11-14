@@ -30,13 +30,23 @@ function tidy(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+// One pass can rebuild a block from the fragments left by a nested one, so repeat until the
+// text settles.
+function stripBlocks(html: string): string {
+  let text = html;
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "");
+  } while (text !== previous);
+  return text;
+}
 // Store pages come as HTML (CurseForge, WowUp Hub), BBCode (WoWInterface) or Markdown (GitHub,
 // Tukui). A terminal shows plain lines, so markup goes and block ends become line breaks.
 export function htmlToText(html: string): string {
   return tidy(
     decode(
-      html
-        .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+      stripBlocks(html)
         .replace(/\s+/g, " ")
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<li[^>]*>/gi, "\n- ")
