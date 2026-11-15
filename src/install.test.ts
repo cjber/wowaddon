@@ -11,7 +11,6 @@ import {
   removeInstalled,
   withInstallLock,
 } from "./install";
-import { LOCK_MAX_AGE_MS } from "./lock";
 import { readState, type State, writeState } from "./state";
 import { offline, tempContext, zip } from "./testing/helpers";
 import type { Entry, Installed, Release } from "./types";
@@ -603,35 +602,44 @@ test("live lock blocks, dead PID lock is recovered", async () => {
   await withInstallLock(fixture.ctx, async () => {});
   expect(await readdir(dirname(lock))).not.toContain("forever.lock");
 });
-test("a lock held by another user's live process (EPERM) blocks", async () => {
-  const lock = join(fixture.ctx.configDir, "state/forever.lock");
-  await mkdir(dirname(lock), { recursive: true });
-  await writeFile(lock, JSON.stringify({ pid: 4242, startedAt: Date.now() }));
-  const kill = spyOn(process, "kill").mockImplementation(() => {
-    throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
-  });
-  try {
-    await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
-      code: "LOCKED",
+test.each([0, 2 * 60 * 60 * 1000])(
+  "a live process (EPERM) blocks with lock age %i",
+  async (age) => {
+    const lock = join(fixture.ctx.configDir, "state/forever.lock");
+    await mkdir(dirname(lock), { recursive: true });
+    await writeFile(lock, JSON.stringify({ pid: 4242, startedAt: Date.now() - age }));
+    const kill = spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
     });
-  } finally {
-    kill.mockRestore();
-  }
-  expect(await readFile(lock, "utf8")).toContain("4242");
-});
-test("a lock older than the maximum age is reclaimed even if its PID was reused", async () => {
+    try {
+      await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+        code: "LOCKED",
+      });
+    } finally {
+      kill.mockRestore();
+    }
+    expect(await readFile(lock, "utf8")).toContain("4242");
+  },
+);
+test("an old live owner keeps its lock and blocks the operation", async () => {
   const lock = join(fixture.ctx.configDir, "state/forever.lock");
   await mkdir(dirname(lock), { recursive: true });
-  await writeFile(
-    lock,
-    JSON.stringify({ pid: process.pid, startedAt: Date.now() - LOCK_MAX_AGE_MS - 1000 }),
-  );
-  await withInstallLock(fixture.ctx, async () => {});
-  expect(await readdir(dirname(lock))).not.toContain("forever.lock");
-  await writeFile(lock, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
-  await expect(withInstallLock(fixture.ctx, async () => {})).rejects.toMatchObject({
+  const owner = JSON.stringify({
+    pid: process.pid,
+    token: "original-owner",
+    startedAt: Date.now() - 2 * 60 * 60 * 1000,
+  });
+  await writeFile(lock, owner);
+  let ran = false;
+  await expect(
+    withInstallLock(fixture.ctx, async () => {
+      ran = true;
+    }),
+  ).rejects.toMatchObject({
     code: "LOCKED",
   });
+  expect(ran).toBe(false);
+  expect(await readFile(lock, "utf8")).toBe(owner);
 });
 test("reclaiming a stale lock is always followed by another attempt", async () => {
   const lock = join(fixture.ctx.configDir, "state/forever.lock");

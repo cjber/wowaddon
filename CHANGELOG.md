@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Operations keep their lock while the owning process is alive, even after an hour.
+
 ## [2.3.3] - 2026-11-14
 
 ### Fixed
