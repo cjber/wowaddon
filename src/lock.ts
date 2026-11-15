@@ -4,9 +4,6 @@ import { isMissing } from "./config";
 import { type Context, WowaddonError } from "./types";
 
 const lockPath = (ctx: Context) => join(ctx.configDir, "state", `${ctx.flavor}.lock`);
-// No wowaddon operation runs this long, so an older lock whose PID is alive belongs to a
-// process that reused the PID of a crashed run.
-export const LOCK_MAX_AGE_MS = 60 * 60 * 1000;
 export async function releaseLock(ctx: Context, token: string): Promise<void> {
   try {
     if ((await readFile(lockPath(ctx), "utf8")) === token) await rm(lockPath(ctx));
@@ -64,9 +61,8 @@ function processAlive(pid: number): boolean {
 }
 function assertStale(ctx: Context, existing: string): void {
   let pid: unknown;
-  let startedAt: unknown;
   try {
-    ({ pid, startedAt } = JSON.parse(existing));
+    ({ pid } = JSON.parse(existing));
   } catch {
     throw new WowaddonError(
       "LOCKED",
@@ -75,11 +71,7 @@ function assertStale(ctx: Context, existing: string): void {
   }
   if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0)
     throw new WowaddonError("LOCKED", "Invalid wowaddon lock PID.");
-  const expired =
-    typeof startedAt === "number" &&
-    Number.isFinite(startedAt) &&
-    Date.now() - startedAt > LOCK_MAX_AGE_MS;
-  if (!expired && processAlive(pid))
+  if (processAlive(pid))
     throw new WowaddonError(
       "LOCKED",
       `Another wowaddon operation is running (PID ${pid}). If it is not, remove ${lockPath(ctx)}.`,
