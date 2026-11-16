@@ -782,6 +782,69 @@ test("sync installs a required dependency of a tracked CurseForge addon", async 
   expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe("cf 1000\ncf 2000  # Core\n");
   expect(Object.keys((await readState(fixture.ctx)).addons).sort()).toEqual(["cf:1000", "cf:2000"]);
 });
+const bundledCoreConsumers = [1001, 1002, 1003];
+// Three addons that bundle Core and also require it, in a release that does or does not bundle it.
+async function unbundleRoutes(bundled: boolean, fileId: number) {
+  const core = await zip({
+    "Core/Core.toc": "## Interface: 16001\n",
+    "Core/marker": "dependency",
+  });
+  const routes: Record<string, unknown> = {
+    "https://api.cfwidget.com/wow/addons/2000": { id: 2000, title: "Core" },
+    [cfFilesUrl(2000)]: { data: [cfFile(2000, 9)], pagination: { totalCount: 1 } },
+    [cfDependenciesUrl(2000, 9)]: cfDependencies(),
+    [cfDownloadUrl(2000, 9)]: new Response(core),
+  };
+  for (const id of bundledCoreConsumers) {
+    const files: Record<string, string> = {
+      [`Consumer${id}/Consumer${id}.toc`]: "## Interface: 16001\n",
+    };
+    if (bundled) files["Core/Core.toc"] = "## Interface: 16001\n";
+    routes[cfFilesUrl(id)] = { data: [cfFile(id, fileId)], pagination: { totalCount: 1 } };
+    routes[cfDependenciesUrl(id, fileId)] = cfDependencies([
+      { id: 2000, type: "RequiredDependency" },
+    ]);
+    routes[cfDownloadUrl(id, fileId)] = new Response(await zip(files));
+  }
+  return routeFetch(routes);
+}
+test("a dependency every consumer stops bundling in one sync is installed and tracked", async () => {
+  await writeFile(
+    manifestPath(fixture.ctx),
+    bundledCoreConsumers.map((id) => `cf ${id}\n`).join(""),
+  );
+  setFetch((await unbundleRoutes(true, 1)).fetch);
+  await syncAddons(fixture.ctx, {});
+  expect(await readdir(fixture.ctx.addonsDir)).toContain("Core");
+  const routes = await unbundleRoutes(false, 2);
+  setFetch(routes.fetch);
+  const { rows } = await syncAddons(fixture.ctx, {});
+  expect(rows.map((row) => row.status)).toEqual(["current", "current", "current"]);
+  expect(rows[2].dependencies?.map((dependency) => dependency.entry.id)).toEqual(["cf:2000"]);
+  expect(routes.calls.filter((url) => url === cfDownloadUrl(2000, 9))).toHaveLength(1);
+  expect(await readdir(fixture.ctx.addonsDir)).toContain("Core");
+  const state = await readState(fixture.ctx);
+  expect(Object.keys(state.addons).sort()).toEqual(["cf:1001", "cf:1002", "cf:1003", "cf:2000"]);
+  for (const id of bundledCoreConsumers) expect(state.addons[`cf:${id}`].versionKey).toBe("2");
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe(
+    "cf 1001\ncf 1002\ncf 1003\ncf 2000  # Core\n",
+  );
+});
+test("a dependency already tracked keeps its folder when its consumers unbundle it", async () => {
+  const manifest = "cf 1001\ncf 1002\ncf 1003\ncf 2000\n";
+  await writeFile(manifestPath(fixture.ctx), manifest);
+  setFetch((await unbundleRoutes(true, 1)).fetch);
+  await syncAddons(fixture.ctx, {});
+  setFetch((await unbundleRoutes(false, 2)).fetch);
+  const { rows } = await syncAddons(fixture.ctx, {});
+  expect(rows.map((row) => row.status)).toEqual(["current", "current", "current", "current"]);
+  expect(rows.every((row) => row.dependencies === undefined)).toBe(true);
+  expect(await readFile(join(fixture.ctx.addonsDir, "Core/marker"), "utf8")).toBe("dependency");
+  const state = await readState(fixture.ctx);
+  expect(state.addons["cf:2000"]).toMatchObject({ versionKey: "9", folders: ["Core"] });
+  for (const id of bundledCoreConsumers) expect(state.addons[`cf:${id}`].versionKey).toBe("2");
+  expect(await readFile(manifestPath(fixture.ctx), "utf8")).toBe(manifest);
+});
 test("sync --dry-run reports the dependency and writes nothing", async () => {
   await writeFile(manifestPath(fixture.ctx), "cf 1000\n");
   setFetch((await dependencyRoutes()).fetch);
