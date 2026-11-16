@@ -20,9 +20,9 @@
     "build": "bun scripts/build.ts"
   },
   "dependencies": {
-    "@opentui/core": "0.8.4",
-    "@opentui/react": "0.8.4",
-    "@zip.js/zip.js": "2.24.0",
+    "@opentui/core": "0.9.0",
+    "@opentui/react": "0.9.0",
+    "@zip.js/zip.js": "2.25.0",
     "react": "19.3.1"
   },
   "devDependencies": {
