@@ -1,7 +1,7 @@
 {
-  "_note": "Daily CurseForge download totals per WoW: Forever project, as recorded by the Ledger. One entry per UTC day; the only dated per-project series that exists anywhere.",
+  "_note": "Daily CurseForge download totals per WoW: Forever project, as recorded by the Ledger. One entry per UTC day.",
   "schema": 1,
-  "updatedAt": "2026-11-16T21:26:18.529Z",
+  "updatedAt": "2026-11-16T21:28:10.725Z",
   "projects": {
     "1705762": {
       "totals": [
