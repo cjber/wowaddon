@@ -1,0 +1,87 @@
+{
+  "_note": "Daily CurseForge download totals per WoW: Forever project, as recorded by the Ledger. One entry per UTC day; the only dated per-project series that exists anywhere.",
+  "schema": 1,
+  "updatedAt": "2026-11-16T21:26:18.529Z",
+  "projects": {
+    "1705762": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.651Z",
+          "total": 2037053
+        }
+      ],
+      "builds": 154
+    },
+    "1705879": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.620Z",
+          "total": 60031
+        }
+      ],
+      "builds": 121
+    },
+    "1708506": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.613Z",
+          "total": 20589
+        }
+      ],
+      "builds": 113
+    },
+    "1708599": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.608Z",
+          "total": 1607100
+        }
+      ],
+      "builds": 149
+    },
+    "1711538": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.607Z",
+          "total": 76932
+        }
+      ],
+      "builds": 153
+    },
+    "1786835": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.568Z",
+          "total": 2637
+        }
+      ],
+      "builds": 38
+    },
+    "1794367": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.561Z",
+          "total": 1148
+        }
+      ],
+      "builds": 21
+    },
+    "1795141": {
+      "totals": [
+        {
+          "day": "2026-11-16",
+          "at": "2026-11-16T21:24:16.565Z",
+          "total": 3355
+        }
+      ],
+      "builds": 25
+    }
+  }
+}
