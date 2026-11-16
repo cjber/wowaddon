@@ -204,56 +204,82 @@ function ownedByTracked(state: State, manifest: Entry[], folders: string[]): boo
     return folders.every((folder) => owned.has(folder.toLowerCase()));
   });
 }
+// The state one add or sync carries through every requirement it visits: ids settled by being
+// installed or already tracked, ids on the current recursion path so a cycle terminates, and
+// archives read but left uninstalled because another tracked addon still owned their folders.
+interface RequirementWalk {
+  resolved: Set<string>;
+  visiting: Set<string>;
+  read: Map<string, { release: Release; archive: Archive }>;
+}
+function requirementWalk(): RequirementWalk {
+  return { resolved: new Set(), visiting: new Set(), read: new Map() };
+}
 // Installs each required CurseForge dependency the manifest does not track yet, as a normal add,
-// recursing into its own requirements. Required ids seen anywhere in this operation are visited
-// once, so a dependency cycle terminates; a dependency whose folders another tracked addon
-// installed is left out. The rows of everything considered are returned for reporting.
+// recursing into its own requirements. A dependency whose folders another tracked addon installed
+// stays unresolved, so a later update in the same operation revisits it once the last addon that
+// shipped those folders stops doing so; its archive is kept so it is fetched only once.
+// The rows of everything considered are returned for reporting.
 async function addRequirements(
   ctx: Context,
   state: State,
   manifest: Entry[],
   requires: string[] | undefined,
   opts: InstallOptions,
-  seen: Set<string>,
+  walk: RequirementWalk,
 ): Promise<Row[]> {
   const rows: Row[] = [];
   if (!Array.isArray(requires)) return rows;
   for (const modId of requires) {
-    if (!/^[1-9]\d*$/.test(modId) || seen.has(modId)) continue;
-    seen.add(modId);
+    if (!/^[1-9]\d*$/.test(modId) || walk.resolved.has(modId) || walk.visiting.has(modId)) continue;
     const id = `cf:${modId}`;
-    if (manifest.some((entry) => entry.id === id)) continue;
-    const entry = dependencyEntry(modId);
-    opts.onProgress?.({ id, phase: "resolving" });
-    let release: Release;
-    let archive: Archive;
+    if (manifest.some((entry) => entry.id === id)) {
+      walk.resolved.add(modId);
+      continue;
+    }
+    walk.visiting.add(modId);
     try {
-      release = await resolvers.cf(ctx, modId, opts.signal);
-      opts.onProgress?.({ id, phase: "downloading" });
-      archive = await readRelease(ctx, entry, release, opts.signal);
-    } catch (error) {
-      const row = failure(entry, state, error);
-      opts.onProgress?.({ id, phase: "failed", message: row.message });
+      const entry = dependencyEntry(modId);
+      let fetched = walk.read.get(modId);
+      if (!fetched) {
+        opts.onProgress?.({ id, phase: "resolving" });
+        try {
+          const release = await resolvers.cf(ctx, modId, opts.signal);
+          opts.onProgress?.({ id, phase: "downloading" });
+          fetched = { release, archive: await readRelease(ctx, entry, release, opts.signal) };
+        } catch (error) {
+          const row = failure(entry, state, error);
+          opts.onProgress?.({ id, phase: "failed", message: row.message });
+          rows.push(row);
+          // A failed lookup will not succeed for a later consumer in the same operation: report it once.
+          walk.resolved.add(modId);
+          continue;
+        }
+        walk.read.set(modId, fetched);
+      }
+      const { release, archive } = fetched;
+      if (ownedByTracked(state, manifest, archive.folders)) {
+        rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, walk)));
+        continue;
+      }
+      walk.read.delete(modId);
+      const note = await cfProjectTitle(modId, opts.signal);
+      if (note) entry.note = note;
+      let row: Row;
+      try {
+        row = await installAddon(ctx, state, entry, release, { ...opts, archive });
+      } catch (error) {
+        row = failure(entry, state, error);
+        opts.onProgress?.({ id, phase: "failed", message: row.message });
+      }
       rows.push(row);
-      continue;
+      walk.resolved.add(modId);
+      if (!installedRow(row, opts.dryRun)) continue;
+      manifest.push(entry);
+      rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, walk)));
+    } finally {
+      walk.visiting.delete(modId);
     }
-    if (ownedByTracked(state, manifest, archive.folders)) {
-      rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, seen)));
-      continue;
-    }
-    const note = await cfProjectTitle(modId, opts.signal);
-    if (note) entry.note = note;
-    let row: Row;
-    try {
-      row = await installAddon(ctx, state, entry, release, { ...opts, archive });
-    } catch (error) {
-      row = failure(entry, state, error);
-      opts.onProgress?.({ id, phase: "failed", message: row.message });
-    }
-    rows.push(row);
-    if (!installedRow(row, opts.dryRun)) continue;
-    manifest.push(entry);
-    rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, seen)));
   }
   return rows;
 }
@@ -444,7 +470,7 @@ export async function addAddon(
     const saves = row.status === "current" || row.status === "dev" || row.status === "updated";
     if (!saves && !installedRow(row, opts.dryRun)) return row;
     const dependencies = installedRow(row, opts.dryRun)
-      ? await addRequirements(ctx, state, tracked, row.latest?.requires, opts, new Set())
+      ? await addRequirements(ctx, state, tracked, row.latest?.requires, opts, requirementWalk())
       : [];
     if (dependencies.length) row.dependencies = dependencies;
     return saves ? save(row, dependencies) : row;
@@ -507,7 +533,7 @@ export async function syncAddons(
     const rows: Row[] = [];
     const dependencies: Row[] = [];
     const tracked = [...manifest];
-    const seen = new Set<string>();
+    const walk = requirementWalk();
     for (const entry of selected) {
       checkAbort(opts.signal);
       if (errors.has(entry.id)) {
@@ -524,7 +550,7 @@ export async function syncAddons(
           tracked,
           row.latest?.requires,
           { ...opts, beforeChange },
-          seen,
+          walk,
         );
         if (added.length) row.dependencies = added;
         dependencies.push(...added);
