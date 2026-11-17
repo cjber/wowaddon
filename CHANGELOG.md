@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-11-17
+
 ### Fixed
 
 - `sync` installs a required dependency again when every tracked addon that bundled its folders
