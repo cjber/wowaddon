@@ -895,3 +895,80 @@ test("check reports a required dependency neither tracked nor installed", async 
   await writeState(fixture.ctx, state);
   expect((await listRows(fixture.ctx, { refresh: true }))[0].missingDependencies).toBeUndefined();
 });
+// Core (cf:2000) ships Core 2.0.0 on its own; each consumer requires it and may bundle its own copy.
+async function mixedCoreRoutes(consumers: Record<number, { file: number; core?: string }>) {
+  const routes: Record<string, unknown> = {
+    "https://api.cfwidget.com/wow/addons/2000": { id: 2000, title: "Core" },
+    [cfFilesUrl(2000)]: { data: [cfFile(2000, 9)], pagination: { totalCount: 1 } },
+    [cfDependenciesUrl(2000, 9)]: cfDependencies(),
+    [cfDownloadUrl(2000, 9)]: new Response(
+      await zip({
+        "Core/Core.toc": "## Interface: 16001\n## Version: v2\n",
+        "Core/marker": "standalone v2",
+      }),
+    ),
+  };
+  for (const [key, { file, core }] of Object.entries(consumers)) {
+    const id = Number(key);
+    const files: Record<string, string> = {
+      [`Consumer${id}/Consumer${id}.toc`]: "## Interface: 16001\n",
+    };
+    if (core) {
+      files["Core/Core.toc"] = `## Interface: 16001\n## Version: ${core}\n`;
+      files["Core/marker"] = `bundled ${core} by ${id}`;
+    }
+    routes[cfFilesUrl(id)] = { data: [cfFile(id, file)], pagination: { totalCount: 1 } };
+    routes[cfDependenciesUrl(id, file)] = cfDependencies([
+      { id: 2000, type: "RequiredDependency" },
+    ]);
+    routes[cfDownloadUrl(id, file)] = new Response(await zip(files));
+  }
+  return routeFetch(routes);
+}
+async function syncCore(consumers: Parameters<typeof mixedCoreRoutes>[0]) {
+  setFetch((await mixedCoreRoutes(consumers)).fetch);
+  const { rows } = await syncAddons(fixture.ctx, {});
+  return {
+    rows: Object.fromEntries(rows.map((row) => [row.entry.id, row])),
+    marker: await readFile(join(fixture.ctx.addonsDir, "Core/marker"), "utf8"),
+    state: await readState(fixture.ctx),
+  };
+}
+test("a tracked dependency keeps its newer copy when a consumer goes back to bundling an older one", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 1001\ncf 1002\n");
+  await syncCore({ 1001: { file: 1, core: "v1" }, 1002: { file: 1, core: "v1" } });
+  await syncCore({ 1001: { file: 2 }, 1002: { file: 1, core: "v1" } });
+  expect((await syncCore({ 1001: { file: 2 }, 1002: { file: 3, core: "v3" } })).marker).toBe(
+    "bundled v3 by 1002",
+  );
+  const unbundled = await syncCore({ 1001: { file: 2 }, 1002: { file: 4 } });
+  expect(unbundled.marker).toBe("standalone v2");
+  expect(unbundled.state.addons["cf:2000"]).toMatchObject({ versionKey: "9", folders: ["Core"] });
+  // cf:1002 goes back to a file that bundles Core v1: the standalone v2 stays.
+  const older = await syncCore({ 1001: { file: 2 }, 1002: { file: 1, core: "v1" } });
+  expect(older.marker).toBe("standalone v2");
+  expect(older.state.addons["cf:1002"].folders).toEqual(["Consumer1002", "Core"]);
+  expect(older.rows["cf:2000"].status).toBe("current");
+  const again = await syncCore({ 1001: { file: 2 }, 1002: { file: 4 } });
+  expect(again.marker).toBe("standalone v2");
+  expect(again.state.addons["cf:2000"]).toMatchObject({ versionKey: "9", folders: ["Core"] });
+  expect(again.rows["cf:2000"].status).toBe("current");
+  expect(again.state.addons["cf:1002"].folders).toEqual(["Consumer1002"]);
+});
+test("a consumer bundling a newer copy than the tracked dependency wins the shared folder", async () => {
+  await writeFile(manifestPath(fixture.ctx), "cf 1001\ncf 2000\n");
+  await syncCore({ 1001: { file: 1 } });
+  const newer = await syncCore({ 1001: { file: 2, core: "v3" } });
+  expect(newer.marker).toBe("bundled v3 by 1001");
+  // cf:2000 stays current with its own release recorded; the folder is listed as shared, so its
+  // contents are the newest copy any owner ships, not necessarily cf:2000's.
+  expect(newer.rows["cf:2000"]).toMatchObject({
+    status: "current",
+    installed: { versionKey: "9" },
+  });
+  const listed = await listRows(fixture.ctx, { refresh: false });
+  expect(listed.find((row) => row.entry.id === "cf:2000")?.sharedFolders).toEqual([
+    { folder: "Core", owners: ["cf:1001", "cf:2000"] },
+  ]);
+  expect((await syncCore({ 1001: { file: 2, core: "v3" } })).marker).toBe("bundled v3 by 1001");
+});

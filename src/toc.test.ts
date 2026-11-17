@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { devBuildTag, releaseSupersedesDevBuild, tocMatchesFolder, tocSupports } from "./toc";
+import {
+  devBuildTag,
+  releaseSupersedesDevBuild,
+  releaseVersionAtLeast,
+  tocMatchesFolder,
+  tocSupports,
+} from "./toc";
 
 test("multi-value and flavor-specific Interface lines", () => {
   expect(tocSupports("## Interface: 11508, 16001\n", "forever")).toBe(true);
@@ -33,4 +39,12 @@ test("a store release supersedes a dev build of an older tag, flavor suffix and 
   expect(releaseSupersedesDevBuild("v1.0.24-forever", "v1.0.24")).toBe(false);
   expect(releaseSupersedesDevBuild("v1.0.23-forever", "v1.0.24")).toBe(false);
   expect(releaseSupersedesDevBuild("Naowh suite 1.2.19", "v1.0.24")).toBe(false);
+});
+test("shared folder versions order any dotted number, and an unordered one lets the copy in", () => {
+  expect(releaseVersionAtLeast("v1", "v2")).toBe(false);
+  expect(releaseVersionAtLeast("v3", "v2")).toBe(true);
+  expect(releaseVersionAtLeast("2.0", "2.0.0")).toBe(true);
+  expect(releaseVersionAtLeast("1.10", "1.9.5")).toBe(true);
+  expect(releaseVersionAtLeast("2.0.2-forever", "2.0.10")).toBe(false);
+  expect(releaseVersionAtLeast("r123", "2.0.0")).toBe(true);
 });
