@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   stops bundling them in the same operation. Before, the first consumer marked the dependency as
   handled while another addon still shipped the folder, so the last update could remove it and
   leave it untracked until the next sync.
+- A shared folder keeps the newest TOC `## Version` when versions have fewer or more than three
+  parts, such as `v2` or `1.10`. Before, only `x.y.z` versions were ordered, so a consumer that
+  bundled an older `v1` copy replaced a tracked dependency's `v2`, and the older copy stayed.
 
 ## [2.3.4] - 2026-11-15
 
