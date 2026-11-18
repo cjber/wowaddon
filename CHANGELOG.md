@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-11-18
+
 ### Fixed
 
 - An empty `.git` directory in a folder above the AddOns folder (such as a stray one in a temp
