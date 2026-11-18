@@ -16,6 +16,7 @@
     "format": "biome check --write .",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun test",
+    "gate:changed": "scripts/gate-changed.sh",
     "gate": "bun run check && bun run build && bun scripts/changelog.ts --check",
     "build": "bun scripts/build.ts"
   },
