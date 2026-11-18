@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - An empty `.git` directory in a folder above the AddOns folder (such as a stray one in a temp
   or home folder) no longer makes every addon read as a dev link and skip installs. Only a real
   git marker (a `.git` directory holding `HEAD`, or a `gitdir:` file) counts as a checkout.
+  This also lets a store sync of ForeverCore run while another addon sharing it is linked.
   Archive reading is also faster on large packages: folder detection is now a single pass over
   the entries instead of a full scan per folder.
 
