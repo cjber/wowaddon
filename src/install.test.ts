@@ -313,6 +313,28 @@ test("inside a git worktree skips without touching it", async () => {
   ).toBe("dev");
   expect(await contents("Foo")).toBe("old");
 });
+test("a symlinked .git above the AddOns folder still counts as a checkout", async () => {
+  await folder("Foo");
+  await own();
+  const gitdir = join(fixture.root, "dotgit");
+  await mkdir(gitdir);
+  await writeFile(join(gitdir, "HEAD"), "ref: refs/heads/main\n");
+  await symlink(gitdir, join(dirname(fixture.ctx.addonsDir), ".git"));
+  expect(
+    (
+      await withInstallLock(fixture.ctx, (current) =>
+        installAddon(fixture.ctx, current, entry, release),
+      )
+    ).status,
+  ).toBe("dev");
+  expect(await contents("Foo")).toBe("old");
+});
+test("a dangling .git symlink above the AddOns folder fails closed", async () => {
+  await folder("Foo");
+  await own();
+  await symlink(join(fixture.root, "missing"), join(dirname(fixture.ctx.addonsDir), ".git"));
+  expect(await protectedFolder(fixture.ctx, "Foo")).toBe(true);
+});
 test("unowned collision requires adopt; adopt replaces and owns", async () => {
   await folder("Foo");
   await download();

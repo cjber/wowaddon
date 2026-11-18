@@ -55,20 +55,24 @@ async function assertRoot(ctx: Context): Promise<void> {
       "The AddOns directory changed; reopen the context before installing.",
     );
 }
+// Depth first and one folder at a time, so a marker found early wins over an unreadable sibling
+// read later.
 async function containsGit(path: string): Promise<boolean> {
   const items = await readdir(path, { withFileTypes: true });
   if (items.some((item) => item.name.toLowerCase() === ".git")) return true;
-  const nested = items.filter((item) => item.isDirectory());
-  return (await Promise.all(nested.map((item) => containsGit(join(path, item.name))))).some(
-    Boolean,
-  );
+  for (const item of items)
+    if (item.isDirectory() && (await containsGit(join(path, item.name)))) return true;
+  return false;
 }
 // A real git marker, as git itself recognises one: a directory holding HEAD, or a gitfile
 // pointing at one. A stray empty .git directory in an ancestor (a temp folder, a home folder)
 // is not a checkout and must not make every addon below it read as a dev link.
 async function isGitMarker(path: string): Promise<boolean> {
-  const marker = await info(path);
-  if (!marker) return false;
+  const entry = await info(path);
+  if (!entry) return false;
+  // Git follows a symlinked .git; a link whose target cannot be read fails closed.
+  const marker = entry.isSymbolicLink() ? await stat(path).catch(() => undefined) : entry;
+  if (!marker) return true;
   if (marker.isFile()) {
     // An unreadable gitfile fails closed: it may still point at a checkout.
     const text = await readFile(path, "utf8").catch((error: unknown) =>
@@ -77,7 +81,7 @@ async function isGitMarker(path: string): Promise<boolean> {
     return text.startsWith("gitdir:");
   }
   if (!marker.isDirectory()) return false;
-  return !!(await info(join(path, "HEAD")));
+  return !!(await stat(join(path, "HEAD")).catch((error: unknown) => !isMissing(error)));
 }
 interface FolderProtection {
   symlink: boolean;
