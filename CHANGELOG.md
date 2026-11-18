@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- An empty `.git` directory in a folder above the AddOns folder (such as a stray one in a temp
+  or home folder) no longer makes every addon read as a dev link and skip installs. Only a real
+  git marker (a `.git` directory holding `HEAD`, or a `gitdir:` file) counts as a checkout.
+  Archive reading is also faster on large packages: folder detection is now a single pass over
+  the entries instead of a full scan per folder.
+
 ## [2.3.5] - 2026-11-17
 
 ### Fixed

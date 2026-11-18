@@ -120,30 +120,35 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
         mapped = new Map([...mapped].map(([path, data]) => [`${folder}/${path}`, data]));
       }
     }
-    const candidates = new Set(
-      [...mapped.keys()].filter((path) => path.includes("/")).map((path) => path.split("/")[0]),
-    );
-    const folders = [...candidates]
-      .filter((folder) =>
-        [...mapped].some(([path, data]) => {
-          const [top, file, ...rest] = path.split("/");
-          return (
-            top === folder &&
-            rest.length === 0 &&
-            tocMatchesFolder(file, folder) &&
-            tocSupports(new TextDecoder().decode(data), opts.flavor)
-          );
-        }),
+    const decoder = new TextDecoder();
+    const compatible = new Set<string>();
+    for (const [path, data] of mapped) {
+      const slash = path.indexOf("/");
+      if (slash < 0) continue;
+      const top = path.slice(0, slash);
+      const file = path.slice(slash + 1);
+      if (
+        !file.includes("/") &&
+        tocMatchesFolder(file, top) &&
+        tocSupports(decoder.decode(data), opts.flavor)
       )
-      .sort();
+        compatible.add(top);
+    }
+    const folders = [...compatible].sort();
     if (!folders.length)
       throw new WowaddonError(
         "NO_BUILD",
         "Archive has no compatible addon folders for this flavor.",
       );
+    const folderSet = new Set(folders);
     return {
       folders,
-      files: new Map([...mapped].filter(([path]) => folders.includes(path.split("/")[0]))),
+      files: new Map(
+        [...mapped].filter(([path]) => {
+          const slash = path.indexOf("/");
+          return slash >= 0 && folderSet.has(path.slice(0, slash));
+        }),
+      ),
     };
   } catch (error) {
     checkAbort(opts.signal);

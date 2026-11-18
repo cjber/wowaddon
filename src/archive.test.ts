@@ -16,6 +16,13 @@ test("valid multi-folder package skips foreign-only folders", async () => {
   expect(archive.folders).toEqual(["Foo"]);
   expect([...archive.files.keys()]).toEqual(["Foo/Foo.toc", "Foo/a.lua"]);
 });
+test("a root-level file is not part of a like-named addon folder", async () => {
+  const archive = await readArchive(await zip({ "Foo/Foo.toc": toc, FooX: "root" }), {
+    flavor: "forever",
+  });
+  expect(archive.folders).toEqual(["Foo"]);
+  expect([...archive.files.keys()]).toEqual(["Foo/Foo.toc"]);
+});
 test("zero compatible or mismatched TOC name fails", async () => {
   await expect(
     readArchive(await zip({ "Foo/Foo.toc": "## Interface: 11508" }), { flavor: "forever" }),

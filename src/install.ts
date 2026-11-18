@@ -56,11 +56,28 @@ async function assertRoot(ctx: Context): Promise<void> {
     );
 }
 async function containsGit(path: string): Promise<boolean> {
-  for (const item of await readdir(path, { withFileTypes: true })) {
-    if (item.name.toLowerCase() === ".git") return true;
-    if (item.isDirectory() && (await containsGit(join(path, item.name)))) return true;
+  const items = await readdir(path, { withFileTypes: true });
+  if (items.some((item) => item.name.toLowerCase() === ".git")) return true;
+  const nested = items.filter((item) => item.isDirectory());
+  return (await Promise.all(nested.map((item) => containsGit(join(path, item.name))))).some(
+    Boolean,
+  );
+}
+// A real git marker, as git itself recognises one: a directory holding HEAD, or a gitfile
+// pointing at one. A stray empty .git directory in an ancestor (a temp folder, a home folder)
+// is not a checkout and must not make every addon below it read as a dev link.
+async function isGitMarker(path: string): Promise<boolean> {
+  const marker = await info(path);
+  if (!marker) return false;
+  if (marker.isFile()) {
+    // An unreadable gitfile fails closed: it may still point at a checkout.
+    const text = await readFile(path, "utf8").catch((error: unknown) =>
+      isMissing(error) ? "" : "gitdir:",
+    );
+    return text.startsWith("gitdir:");
   }
-  return false;
+  if (!marker.isDirectory()) return false;
+  return !!(await info(join(path, "HEAD")));
 }
 interface FolderProtection {
   symlink: boolean;
@@ -90,7 +107,7 @@ export function beginProtectionChecks(ctx: Context): void {
 }
 async function insideWorktree(ctx: Context): Promise<boolean> {
   for (let cursor = ctx.addonsDir; ; cursor = dirname(cursor)) {
-    if (await info(join(cursor, ".git"))) return true;
+    if (await isGitMarker(join(cursor, ".git"))) return true;
     if (dirname(cursor) === cursor) break;
   }
   return false;

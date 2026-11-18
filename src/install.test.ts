@@ -303,6 +303,7 @@ test("inside a git worktree skips without touching it", async () => {
   await folder("Foo");
   await own();
   await mkdir(join(dirname(fixture.ctx.addonsDir), ".git"));
+  await writeFile(join(dirname(fixture.ctx.addonsDir), ".git", "HEAD"), "ref: refs/heads/main\n");
   expect(
     (
       await withInstallLock(fixture.ctx, (current) =>
@@ -818,6 +819,7 @@ test("ancestor git checks are shared across folders and renewed for the next ope
     });
     expect(probe.mock.calls.filter(([path]) => path === ancestor)).toHaveLength(1);
     await mkdir(join(dirname(fixture.ctx.addonsDir), ".git"));
+    await writeFile(join(dirname(fixture.ctx.addonsDir), ".git", "HEAD"), "ref: refs/heads/main\n");
     await withInstallLock(fixture.ctx, async () => {
       expect(await protectedFolder(fixture.ctx, "Foo")).toBe(true);
     });
@@ -825,4 +827,11 @@ test("ancestor git checks are shared across folders and renewed for the next ope
   } finally {
     probe.mockRestore();
   }
+});
+
+test("an empty .git directory in an ancestor is not a checkout", async () => {
+  await mkdir(join(dirname(fixture.ctx.addonsDir), ".git"));
+  await withInstallLock(fixture.ctx, async () => {
+    expect(await protectedFolder(fixture.ctx, "Foo")).toBe(false);
+  });
 });
