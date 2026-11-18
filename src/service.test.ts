@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { lstat, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
 import { CURSE_TOOLS } from "./discover/curseforge";
 import { setFetch } from "./http";
@@ -971,4 +971,71 @@ test("a consumer bundling a newer copy than the tracked dependency wins the shar
     { folder: "Core", owners: ["cf:1001", "cf:2000"] },
   ]);
   expect((await syncCore({ 1001: { file: 2, core: "v3" } })).marker).toBe("bundled v3 by 1001");
+});
+
+// #98: a stray placeholder .git above the AddOns folder (no HEAD) once made every addon a dev link,
+// so a linked Legacy appeared to block a store sync of the plain ForeverCore folder it shares.
+test("one linked addon leaves a plain shared ForeverCore to sync under a stray ancestor .git", async () => {
+  await mkdir(join(fixture.root, ".git", "info"), { recursive: true });
+  await writeFile(join(fixture.root, ".git", "info", ".claude-sandbox-noreplace"), "");
+  const core = (version: string) => ({
+    "ForeverCore/ForeverCore.toc": `## Interface: 16001\n## Version: ${version}\n## X-Curse-Project-ID: 1796337\n`,
+    "ForeverCore/marker": version,
+  });
+  const serve = async (coreVersion: string, fileBase: number) => {
+    const routes: Record<string, unknown> = {};
+    const packages = [
+      { id: 1796337, files: core(coreVersion) },
+      {
+        id: 1705879,
+        files: {
+          ...core("1.15.0"),
+          "LegacyForever/LegacyForever.toc":
+            "## Interface: 16001\n## Version: 2.0.0\n## X-Curse-Project-ID: 1705879\n",
+        },
+      },
+    ];
+    for (const { id, files } of packages) {
+      const fileId = id + fileBase;
+      routes[
+        `https://www.curseforge.com/api/v1/mods/${id}/files?pageIndex=0&pageSize=50&sort=dateCreated&sortDescending=true`
+      ] = {
+        data: [
+          {
+            id: fileId,
+            projectId: id,
+            fileName: `${id}.zip`,
+            gameVersionTypeIds: [88568],
+            gameVersions: ["1.60.0"],
+            releaseType: 1,
+            dateCreated: "2026-11-10",
+          },
+        ],
+        pagination: { totalCount: 1 },
+      };
+      routes[
+        `https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/dependencies?index=0&pageSize=50`
+      ] = { data: [], pagination: { index: 0, pageSize: 50, totalCount: 0 } };
+      routes[`https://www.curseforge.com/api/v1/mods/${id}/files/${fileId}/download`] =
+        new Response(await zip(files));
+    }
+    setFetch(routeFetch(routes).fetch);
+  };
+  await writeFile(manifestPath(fixture.ctx), "cf 1705879\ncf 1796337\n");
+  await serve("1.15.0", 1_000_000);
+  await syncAddons(fixture.ctx, {});
+  const dev = join(fixture.root, "test-artifacts/legacy-forever-dev");
+  await mkdir(dirname(dev), { recursive: true });
+  await rename(join(fixture.ctx.addonsDir, "LegacyForever"), dev);
+  await symlink(dev, join(fixture.ctx.addonsDir, "LegacyForever"));
+  expect(
+    (await listRows(fixture.ctx, { refresh: false })).map((row) => [row.entry.id, row.status]),
+  ).toEqual([
+    ["cf:1705879", "dev"],
+    ["cf:1796337", "current"],
+  ]);
+  await serve("1.15.1", 2_000_000);
+  await syncAddons(fixture.ctx, { ids: ["cf:1796337"] });
+  expect(await readFile(join(fixture.ctx.addonsDir, "ForeverCore/marker"), "utf8")).toBe("1.15.1");
+  expect((await lstat(join(fixture.ctx.addonsDir, "LegacyForever"))).isSymbolicLink()).toBe(true);
 });
