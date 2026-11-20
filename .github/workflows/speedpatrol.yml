@@ -26,7 +26,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      - uses: agent-labs-dev/speedpatrol@f80460788957c55923f5c2798a04ecaed8670ddc # v0
+      - uses: agent-labs-dev/speedpatrol@cca7609cfbe447214470e2699ea980e9fd3681d5 # v0
         with:
           package: speedpatrol@0.2.0
           benchmarks: cli.schema
