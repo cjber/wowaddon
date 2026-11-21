@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- An expiring dev build is replaced only when its `+<sha>` is contained in the newer release
+  (GitHub compare of the release tag against the commit). A build of an unmerged branch, or one
+  with no commit, repository or answer from GitHub, stays a dev link instead of being swapped for
+  a release that lacks its changes.
+
 ## [2.3.6] - 2026-11-18
 
 ### Fixed

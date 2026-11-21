@@ -108,7 +108,7 @@ async function installRoutes() {
   });
   return calls;
 }
-async function devBuild(version: string, tag: string) {
+async function devBuild(version: string, tag: string, compare: unknown = { status: "behind" }) {
   const target = join(fixture.root, "dev-build/Foo");
   await mkdir(target, { recursive: true });
   await writeFile(join(target, "Foo.toc"), `## Interface: 16001\n## Version: ${version}\n`);
@@ -133,6 +133,10 @@ async function devBuild(version: string, tag: string) {
         },
       ]);
     if (url === "https://github.com/a/foo/asset.zip") return new Response(bytes);
+    if (url.startsWith("https://api.github.com/repos/a/foo/compare/")) {
+      expect(url).toBe(`https://api.github.com/repos/a/foo/compare/${tag}...3fa2c1d`);
+      return json(compare);
+    }
     throw new Error(`Unexpected network request: ${url}`);
   });
   await writeFile(manifestPath(fixture.ctx), "gh a/foo\n");
@@ -394,6 +398,20 @@ test("sync replaces an expired dev build and leaves its target untouched", async
   expect(await readFile(join(fixture.ctx.addonsDir, "Foo/marker"), "utf8")).toBe("new");
   expect(await readFile(join(target, "marker"), "utf8")).toBe("dev");
   expect(await readFile(join(target, "Foo.toc"), "utf8")).toContain("v1.0.0-dev+3fa2c1d");
+});
+test("sync keeps a dev build of a commit the newer release does not contain", async () => {
+  const target = await devBuild("v1.0.0-dev+3fa2c1d", "v1.1.0", { status: "diverged" });
+  expect((await listRows(fixture.ctx, { refresh: true }))[0]).toMatchObject({
+    status: "dev",
+    devTag: "v1.0.0",
+    message: "dev build of v1.0.0, waiting for a newer release",
+  });
+  expect((await syncAddons(fixture.ctx, {})).rows[0]).toMatchObject({
+    status: "dev",
+    devTag: "v1.0.0",
+  });
+  expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(target, "marker"), "utf8")).toBe("dev");
 });
 test("sync --dry-run predicts an expired dev build without touching its link", async () => {
   const target = await devBuild("v1.0.0-dev+3fa2c1d", "v1.1.0");

@@ -37,6 +37,7 @@ const installed = (folders = ["Foo"], versionKey = "1"): Installed => ({
 });
 beforeEach(async () => {
   offline();
+  compare = { status: "behind" };
   fixture = await tempContext();
   state = await readState(fixture.ctx);
 });
@@ -62,10 +63,17 @@ async function download(folders = ["Foo"]) {
   }
   return downloadFiles(files);
 }
+// What GitHub answers to the compare of a dev build's commit against the release tag.
+let compare: { status?: string; code?: number } = { status: "behind" };
+const compareUrl = "https://api.github.com/repos/a/b/compare/";
 async function downloadFiles(files: Record<string, string>, expectedUrl = release.url) {
   const bytes = await zip(files);
   let calls = 0;
   setFetch(async (url) => {
+    if (url.startsWith(compareUrl)) {
+      expect(url).toBe(`${compareUrl}v1.1.0...3fa2c1d`);
+      return Response.json({ status: compare.status }, { status: compare.code ?? 200 });
+    }
     expect(url).toBe(expectedUrl);
     calls++;
     return new Response(bytes);
@@ -148,6 +156,65 @@ test("an expired dev build is replaced through its symlink and leaves its target
   expect(await contents("Foo")).toBe("new");
   expect(await readFile(join(development, "marker"), "utf8")).toBe("dev");
   expect(await readFile(join(development, "Foo.toc"), "utf8")).toContain("v1.0.0-dev+3fa2c1d");
+});
+for (const [name, answer] of [
+  ["a commit not in the release", { status: "diverged" }],
+  ["a commit ahead of the release", { status: "ahead" }],
+  ["a failed compare", { code: 404 }],
+] as const)
+  test(`a dev build with ${name} is kept as a dev link`, async () => {
+    compare = answer;
+    const development = await devLink("Foo", "v1.0.0-dev+3fa2c1d");
+    await own();
+    const calls = await download();
+    const row = await withInstallLock(fixture.ctx, (current) =>
+      installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+    );
+    expect(row).toMatchObject({ status: "dev", devTag: "v1.0.0" });
+    expect(row.message).toBe("dev build of v1.0.0, waiting for a newer release");
+    expect(calls()).toBe(0);
+    expect((await lstat(join(fixture.ctx.addonsDir, "Foo"))).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(development, "marker"), "utf8")).toBe("dev");
+  });
+test("a dev build is replaced when its commit is identical to the release tag", async () => {
+  compare = { status: "identical" };
+  await devLink("Foo", "v1.0.0-dev+3fa2c1d");
+  await own();
+  await download();
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, entry, { ...release, version: "v1.1.0" }),
+  );
+  expect(row.status).toBe("updated");
+});
+test("a dev build of a store addon is judged by the repository its TOC names", async () => {
+  const development = await devLink("Foo");
+  await writeFile(
+    join(development, "Foo.toc"),
+    "## Version: v1.0.0-dev+3fa2c1d\n## X-Website: https://github.com/a/b\n",
+  );
+  state.addons[cfEntry.id] = installed();
+  await writeState(fixture.ctx, state);
+  const calls = await downloadFiles(
+    { "Foo/Foo.toc": "## Interface: 16001", "Foo/marker": "new" },
+    cfRelease.url,
+  );
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, cfEntry, { ...cfRelease, version: "v1.1.0-forever" }),
+  );
+  expect(row.status).toBe("updated");
+  expect(calls()).toBe(1);
+});
+test("a dev build with no commit or repository is kept as a dev link", async () => {
+  const development = await devLink("Foo");
+  await writeFile(join(development, "Foo.toc"), "## Version: v1.0.0-dev+3fa2c1d\n");
+  state.addons[cfEntry.id] = installed();
+  await writeState(fixture.ctx, state);
+  const calls = await downloadFiles({}, cfRelease.url);
+  const row = await withInstallLock(fixture.ctx, (current) =>
+    installAddon(fixture.ctx, current, cfEntry, { ...cfRelease, version: "v1.1.0" }),
+  );
+  expect(row).toMatchObject({ status: "dev", devTag: "v1.0.0" });
+  expect(calls()).toBe(0);
 });
 test("an unexpired dev build stays a dev link with its tag", async () => {
   const development = await devLink("Foo", "v1.1.0-dev+3fa2c1d");
