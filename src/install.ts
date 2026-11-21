@@ -12,14 +12,17 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { type Archive, readArchive } from "./archive";
 import { isMissing } from "./config";
-import { checkAbort, getCredentials, requestBytes } from "./http";
+import { stripFlavorSuffix } from "./flavors";
+import { checkAbort, getCredentials, requestBytes, requestJson } from "./http";
 import { acquireLock, releaseLock } from "./lock";
 import { downloadCurseforge } from "./sources/curseforge";
 import { atomicWrite, readState, type State, safeFolder, validateState, writeState } from "./state";
 import {
+  devBuildSha,
   devBuildTag,
   releaseSupersedesDevBuild,
   releaseVersionAtLeast,
+  tocGithubRepo,
   tocMatchesFolder,
   tocVersion,
 } from "./toc";
@@ -193,6 +196,9 @@ export async function foreignFolders(
 export interface DevLink {
   folder: string;
   tag: string;
+  // The commit the build was cut from, and the GitHub repository its TOC names.
+  sha?: string;
+  repo?: string;
 }
 export interface Protection {
   protected: boolean;
@@ -206,8 +212,38 @@ export interface Protection {
 async function devLinkIn(ctx: Context, folder: string): Promise<DevLink | undefined> {
   const target = await info(join(ctx.addonsDir, folder));
   if (!target?.isSymbolicLink()) return undefined;
-  const tag = devBuildTag((await tocOf(ctx, folder)) ?? "");
-  return tag ? { folder, tag } : undefined;
+  const toc = (await tocOf(ctx, folder)) ?? "";
+  const tag = devBuildTag(toc);
+  if (!tag) return undefined;
+  const sha = devBuildSha(toc);
+  const repo = tocGithubRepo(toc);
+  return { folder, tag, ...(sha ? { sha } : {}), ...(repo ? { repo } : {}) };
+}
+// A dev build expires only when its commit is in the release: main is linear but a build of an
+// unmerged branch is not in a newer release. Without a sha, a repository or an answer from GitHub
+// the link stays a dev link.
+export async function devExpired(
+  ctx: Context,
+  entry: Entry,
+  dev: DevLink,
+  release: Release,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (!releaseSupersedesDevBuild(release.version, dev.tag)) return false;
+  const repo = entry.kind === "gh" ? entry.ref : dev.repo;
+  if (!repo || !dev.sha) return false;
+  try {
+    const compare = await requestJson<{ status?: string }>(
+      `https://api.github.com/repos/${repo}/compare/${encodeURIComponent(
+        stripFlavorSuffix(release.version),
+      )}...${dev.sha}`,
+      { credentials: await getCredentials(ctx), signal },
+    );
+    return compare.status === "behind" || compare.status === "identical";
+  } catch {
+    checkAbort(signal);
+    return false;
+  }
 }
 export async function protection(
   ctx: Context,
@@ -649,7 +685,8 @@ export async function installAddon(
   checkAbort(opts.signal);
   const guard = await protection(ctx, entry, installed);
   const dev = guard.dev && !guard.blocked ? guard.dev : undefined;
-  const replace = dev && releaseSupersedesDevBuild(release.version, dev.tag) ? dev : undefined;
+  const replace =
+    dev && (await devExpired(ctx, entry, dev, release, opts.signal)) ? dev : undefined;
   const skipDev = (): Row => {
     const message = dev ? devWaiting(dev.tag) : DEV_SKIPPED;
     progress("skipped", message);

@@ -27,6 +27,15 @@ export function devBuildTag(content: string): string | undefined {
   const version = /^\s*##\s*Version\s*:\s*(.+?)\s*$/im.exec(content)?.[1];
   return version ? devBuildVersion.exec(version)?.[1] : undefined;
 }
+export function devBuildSha(content: string): string | undefined {
+  const version = /^\s*##\s*Version\s*:\s*(.+?)\s*$/im.exec(content)?.[1];
+  return version ? /-dev\+([0-9a-f]+)$/i.exec(version)?.[1] : undefined;
+}
+// The GitHub repository a TOC names in `## X-Website`, as `owner/repo`.
+export function tocGithubRepo(content: string): string | undefined {
+  const site = /^\s*##\s*X-Website\s*:\s*(.+?)\s*$/im.exec(content)?.[1];
+  return site && /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/i.exec(site)?.[1];
+}
 // A store release is named after its tag plus the packager's flavor suffix (`v1.1.1-forever` for
 // tag `v1.1.1`), and main is linear, so a release whose version is above the dev build's tag
 // contains every commit the build was cut from.

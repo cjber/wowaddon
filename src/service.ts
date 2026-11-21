@@ -8,6 +8,7 @@ import { checkAbort } from "./http";
 import {
   beginProtectionChecks,
   DEV_SKIPPED,
+  devExpired,
   devReplaced,
   devWaiting,
   foldersFree,
@@ -36,7 +37,6 @@ import { resolveTukui } from "./sources/tukui";
 import { resolveWago } from "./sources/wago";
 import { resolveWowinterface } from "./sources/wowinterface";
 import { readState, type State } from "./state";
-import { releaseSupersedesDevBuild } from "./toc";
 import {
   type AddonInfo,
   type Category,
@@ -130,7 +130,7 @@ async function statusRow(
   }
   const resolved = await release();
   if (dev) {
-    if (releaseSupersedesDevBuild(resolved.version, dev.tag))
+    if (await devExpired(ctx, entry, dev, resolved))
       return {
         entry,
         installed,
@@ -397,7 +397,7 @@ async function syncEntry(
     }
     opts.onProgress?.({ id: entry.id, phase: "resolving" });
     const resolved = release ?? (await latest(ctx, entry, opts.signal));
-    if (dev && !releaseSupersedesDevBuild(resolved.version, dev.tag)) {
+    if (dev && !(await devExpired(ctx, entry, dev, resolved, opts.signal))) {
       const message = devWaiting(dev.tag);
       opts.onProgress?.({ id: entry.id, phase: "skipped", message });
       return { entry, installed, latest: resolved, status: "dev", message, devTag: dev.tag };

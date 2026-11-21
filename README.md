@@ -244,8 +244,11 @@ Tukui or Wago slug, ignoring case and punctuation, so `questie/questietrace` mat
 as `dev`, not `missing`.
 
 A symlinked dev build whose TOC says `## Version: <tag>-dev+<sha>` expires on its own: once the
-manifest source's latest release is newer than `<tag>`, `sync` removes the symlink (never its
-target) and installs the release, reporting the row as `updated` with the dev tag. Until then it
+manifest source's latest release is newer than `<tag>` and contains `<sha>` (GitHub compare of the
+release tag against the commit, with the repository from a `gh` entry or the TOC's `X-Website`),
+`sync` removes the symlink (never its
+target) and installs the release, reporting the row as `updated` with the dev tag. Until then, or when
+the commit, repository or compare is unavailable (a build of an unmerged branch), it
 stays `dev`, and `list` says which release it is waiting on. A symlink or git checkout without
 that version form is still never touched.
 

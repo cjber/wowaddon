@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import {
+  devBuildSha,
   devBuildTag,
   releaseSupersedesDevBuild,
   releaseVersionAtLeast,
+  tocGithubRepo,
   tocMatchesFolder,
   tocSupports,
 } from "./toc";
@@ -47,4 +49,12 @@ test("shared folder versions order any dotted number, and an unordered one lets 
   expect(releaseVersionAtLeast("1.10", "1.9.5")).toBe(true);
   expect(releaseVersionAtLeast("2.0.2-forever", "2.0.10")).toBe(false);
   expect(releaseVersionAtLeast("r123", "2.0.0")).toBe(true);
+});
+test("reads the commit and GitHub repository a dev build names", () => {
+  expect(devBuildSha("## Version: 1.43.11-dev+3decbaa\n")).toBe("3decbaa");
+  expect(devBuildSha("## Version: v1.1.0\n")).toBeUndefined();
+  expect(tocGithubRepo("## X-Website: https://github.com/cjber/shortest-path-forever\n")).toBe(
+    "cjber/shortest-path-forever",
+  );
+  expect(tocGithubRepo("## X-Website: https://example.com/a/b\n")).toBeUndefined();
 });
