@@ -7,7 +7,7 @@ import {
   rename,
   rm,
   stat,
-  writeFile,
+  statfs,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { type Archive, readArchive } from "./archive";
@@ -461,7 +461,12 @@ export async function readRelease(
     flavor: ctx.flavor,
     source: release.archive === "source",
     signal,
+    maxBytes: await availableBytes(ctx.addonsDir),
   });
+}
+async function availableBytes(path: string): Promise<number> {
+  const fs = await statfs(path, { bigint: true });
+  return Number(fs.bavail * fs.bsize);
 }
 async function replacement(ctx: Context, replaceDev: DevLink | undefined, folder: string) {
   if (replaceDev?.folder !== folder) return false;
@@ -476,15 +481,6 @@ function otherOwners(state: State, id: string, folder: string): string[] {
     )
     .map(([owner]) => owner);
 }
-function archiveTocVersion(archive: Archive, folder: string): string | undefined {
-  const name = folder.toLowerCase();
-  for (const [path, data] of archive.files) {
-    const [top, file, ...rest] = path.split("/");
-    if (rest.length === 0 && top.toLowerCase() === name && tocMatchesFolder(file, top))
-      return tocVersion(new TextDecoder().decode(data));
-  }
-  return undefined;
-}
 // A shared folder is replaced only when the incoming copy is at least as new as the one on disk.
 async function sharedCopyWins(
   ctx: Context,
@@ -493,7 +489,7 @@ async function sharedCopyWins(
   shared: boolean,
 ): Promise<boolean> {
   if (!shared) return true;
-  const incoming = archiveTocVersion(archive, folder);
+  const incoming = archive.versions.get(folder.toLowerCase());
   const current = tocVersion((await tocOf(ctx, folder)) ?? "");
   if (!incoming || !current) return true;
   return releaseVersionAtLeast(incoming, current);
@@ -562,7 +558,7 @@ async function transact(
   ctx: Context,
   state: State,
   id: string,
-  archive: Archive,
+  archive: Archive | undefined,
   installed: Installed | undefined,
   opts: InstallOptions,
 ): Promise<boolean> {
@@ -571,8 +567,9 @@ async function transact(
       "RECOVERY_BLOCKED",
       "An interrupted transaction still needs recovery; its backups have been preserved.",
     );
-  const folders = installFolders(state, id, archive.folders);
-  if (!(await preflight(ctx, state, id, folders, archive.folders, !!opts.adopt, opts.replaceDev)))
+  const shipped = archive?.folders ?? [];
+  const folders = installFolders(state, id, shipped);
+  if (!(await preflight(ctx, state, id, folders, shipped, !!opts.adopt, opts.replaceDev)))
     return false;
   checkAbort(opts.signal);
   const txDir = join(dirname(ctx.addonsDir), `.wowaddon-${crypto.randomUUID()}`);
@@ -581,13 +578,11 @@ async function transact(
   try {
     await mkdir(join(txDir, "new"));
     await mkdir(join(txDir, "old"));
-    for (const [path, bytes] of archive.files) {
-      checkAbort(opts.signal);
-      const destination = join(txDir, "new", path);
-      await mkdir(dirname(destination), { recursive: true });
-      await writeFile(destination, bytes, { mode: 0o644 });
+    if (archive) {
+      await archive.extract(join(txDir, "new"));
+      await opts.beforeChange?.();
     }
-    if (!(await preflight(ctx, state, id, folders, archive.folders, !!opts.adopt, opts.replaceDev)))
+    if (!(await preflight(ctx, state, id, folders, shipped, !!opts.adopt, opts.replaceDev)))
       return false;
     const pending: Pending = {
       schema: 1,
@@ -596,7 +591,7 @@ async function transact(
       before: structuredClone(state),
       operations: [],
     };
-    const incoming = new Set(archive.folders.map((folder) => folder.toLowerCase()));
+    const incoming = new Set(shipped.map((folder) => folder.toLowerCase()));
     for (const folder of folders) {
       // A protected foreign dependency is never a transaction operation, including removal
       // and a newer incoming copy. Preflight permits the parent addon to proceed around it.
@@ -606,7 +601,7 @@ async function transact(
       // Another addon still ships a folder this one no longer does: keep the copy on disk.
       if (!ships && shared) continue;
       // A shared folder stays at the newest TOC version, so an older incoming copy is not written.
-      if (!(await sharedCopyWins(ctx, archive, folder, shared))) continue;
+      if (archive && !(await sharedCopyWins(ctx, archive, folder, shared))) continue;
       pending.operations.push({
         folder,
         hadOld: !!(await info(join(ctx.addonsDir, folder))),
@@ -715,6 +710,7 @@ export async function installAddon(
   if (!opts.archive) progress("downloading");
   const archive = opts.archive ?? (await readRelease(ctx, entry, release, opts.signal));
   if (opts.dryRun) {
+    await archive.extract();
     const folders = installFolders(state, entry.id, archive.folders);
     if (!(await preflight(ctx, state, entry.id, folders, archive.folders, !!opts.adopt, replace)))
       return skipDev();
@@ -730,7 +726,6 @@ export async function installAddon(
       ...(replace ? { devTag: replace.tag } : {}),
     };
   }
-  await opts.beforeChange?.();
   progress("installing");
   const next: Installed = {
     version: release.version,
@@ -761,8 +756,7 @@ export async function removeInstalled(
   opts: InstallOptions = {},
 ): Promise<boolean> {
   if (!state.addons[id]) return false;
-  if (await transact(ctx, state, id, { folders: [], files: new Map() }, undefined, opts))
-    return true;
+  if (await transact(ctx, state, id, undefined, undefined, opts)) return true;
   // A dev-protected folder is never touched: stop tracking it and leave the folder as it is.
   checkAbort(opts.signal);
   const next = structuredClone(state);
