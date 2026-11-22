@@ -1,4 +1,4 @@
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, statfs } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Entry, Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
 import { stripFlavorSuffix } from "./flavors";
@@ -39,6 +39,14 @@ function zipPath(entry: Entry): { path: string; directory: boolean } {
   )
     bad(`ZIP contains a symlink or special entry: ${entry.filename}`);
   return { path, directory };
+}
+export async function availableArchiveBytes(path: string): Promise<number> {
+  const fs = await statfs(path, { bigint: true });
+  return Number(fs.bavail * (fs.frsize || fs.bsize));
+}
+function checkSpace(declared: number, available: number) {
+  if (!Number.isSafeInteger(declared) || declared > available)
+    bad("ZIP exceeds the available disk space at the install target.");
 }
 function archiveError(error: unknown, signal?: AbortSignal): never {
   checkAbort(signal);
@@ -124,8 +132,7 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
         names.set(key, { path: prefix, directory, explicit: explicit || !!previous?.explicit });
       }
       declared += entry.uncompressedSize;
-      if (!Number.isSafeInteger(declared) || declared > opts.maxBytes)
-        bad("ZIP exceeds the available disk space at the install target.");
+      checkSpace(declared, opts.maxBytes);
       if (!isDirectory && !entry.directory) files.push({ entry, path });
     }
 
@@ -170,29 +177,32 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
       const key = top.toLowerCase();
       if (!versions.has(key)) versions.set(key, toc.version);
     }
+    let validated = false;
+    async function extract(stagingDir?: string) {
+      if (!stagingDir && validated) return;
+      try {
+        if (stagingDir) checkSpace(declared, await availableArchiveBytes(stagingDir));
+        for (const { path, entry } of files) {
+          const slash = path.indexOf("/");
+          if (stagingDir && slash >= 0 && compatible.has(path.slice(0, slash)))
+            await stageEntry(entry, join(stagingDir, path), opts.signal);
+          else if (!validated && !tocs.has(entry)) await streamEntry(entry, () => {}, opts.signal);
+        }
+        validated = true;
+      } catch (error) {
+        archiveError(error, opts.signal);
+      }
+    }
     const folders = [...compatible].sort();
-    if (!folders.length)
+    if (!folders.length) {
+      await extract();
       throw new WowaddonError(
         "NO_BUILD",
         "Archive has no compatible addon folders for this flavor.",
       );
+    }
 
-    return {
-      folders,
-      versions,
-      async extract(stagingDir?: string) {
-        try {
-          for (const { path, entry } of files) {
-            const slash = path.indexOf("/");
-            if (stagingDir && slash >= 0 && compatible.has(path.slice(0, slash)))
-              await stageEntry(entry, join(stagingDir, path), opts.signal);
-            else if (!tocs.has(entry)) await streamEntry(entry, () => {}, opts.signal);
-          }
-        } catch (error) {
-          archiveError(error, opts.signal);
-        }
-      },
-    };
+    return { folders, versions, extract };
   } catch (error) {
     archiveError(error, opts.signal);
   } finally {

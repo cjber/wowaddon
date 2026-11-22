@@ -1,16 +1,6 @@
-import {
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  stat,
-  statfs,
-} from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { type Archive, readArchive } from "./archive";
+import { type Archive, availableArchiveBytes, readArchive } from "./archive";
 import { isMissing } from "./config";
 import { stripFlavorSuffix } from "./flavors";
 import { checkAbort, getCredentials, requestBytes, requestJson } from "./http";
@@ -440,10 +430,10 @@ export interface InstallOptions {
   rename?: typeof rename;
   // An expired dev link this install may replace; its target is never touched.
   replaceDev?: DevLink;
-  // A dependency's download, already read, so it is fetched only once.
+  // A dependency's ZIP, already inspected, so it is fetched only once.
   archive?: Archive;
 }
-// Reads a release exactly as an install does: the bytes, then the addon folders and files in them.
+// Downloads a release and inspects its ZIP metadata and TOCs before staging.
 export async function readRelease(
   ctx: Context,
   entry: Entry,
@@ -461,12 +451,8 @@ export async function readRelease(
     flavor: ctx.flavor,
     source: release.archive === "source",
     signal,
-    maxBytes: await availableBytes(ctx.addonsDir),
+    maxBytes: await availableArchiveBytes(ctx.addonsDir),
   });
-}
-async function availableBytes(path: string): Promise<number> {
-  const fs = await statfs(path, { bigint: true });
-  return Number(fs.bavail * fs.bsize);
 }
 async function replacement(ctx: Context, replaceDev: DevLink | undefined, folder: string) {
   if (replaceDev?.folder !== folder) return false;
