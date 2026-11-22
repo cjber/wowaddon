@@ -241,24 +241,28 @@ async function addRequirements(
     try {
       const entry = dependencyEntry(modId);
       let fetched = walk.read.get(modId);
-      if (!fetched) {
-        opts.onProgress?.({ id, phase: "resolving" });
-        try {
+      let owned: boolean;
+      try {
+        if (!fetched) {
+          opts.onProgress?.({ id, phase: "resolving" });
           const release = await resolvers.cf(ctx, modId, opts.signal);
           opts.onProgress?.({ id, phase: "downloading" });
           fetched = { release, archive: await readRelease(ctx, entry, release, opts.signal) };
-        } catch (error) {
-          const row = failure(entry, state, error);
-          opts.onProgress?.({ id, phase: "failed", message: row.message });
-          rows.push(row);
-          // A failed lookup will not succeed for a later consumer in the same operation: report it once.
-          walk.resolved.add(modId);
-          continue;
+          walk.read.set(modId, fetched);
         }
-        walk.read.set(modId, fetched);
+        owned = ownedByTracked(state, manifest, fetched.archive.folders);
+        if (owned) await fetched.archive.extract();
+      } catch (error) {
+        walk.read.delete(modId);
+        const row = failure(entry, state, error);
+        opts.onProgress?.({ id, phase: "failed", message: row.message });
+        rows.push(row);
+        // A failed lookup will not succeed for a later consumer in the same operation: report it once.
+        walk.resolved.add(modId);
+        continue;
       }
       const { release, archive } = fetched;
-      if (ownedByTracked(state, manifest, archive.folders)) {
+      if (owned) {
         rows.push(...(await addRequirements(ctx, state, manifest, release.requires, opts, walk)));
         continue;
       }
