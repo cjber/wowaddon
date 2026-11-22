@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, stat, statfs } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TextReader, Uint8ArrayReader, Uint8ArrayWriter, ZipWriter } from "@zip.js/zip.js";
-import { readArchive as inspectArchive } from "./archive";
+import { availableArchiveBytes, readArchive as inspectArchive } from "./archive";
 import { zip } from "./testing/helpers";
 
 const toc = "## Interface: 16001\n";
@@ -11,8 +11,7 @@ async function readArchive(
   bytes: Uint8Array,
   options: Omit<Parameters<typeof inspectArchive>[1], "maxBytes"> & { maxBytes?: number },
 ) {
-  const disk = await statfs(tmpdir());
-  return inspectArchive(bytes, { maxBytes: disk.bavail * disk.bsize, ...options });
+  return inspectArchive(bytes, { maxBytes: await availableArchiveBytes(tmpdir()), ...options });
 }
 
 async function withStaging(check: (dir: string) => Promise<void>) {
@@ -150,6 +149,36 @@ test("entry count and available space limits", async () => {
     code: "ARCHIVE_INVALID",
   });
 });
+test("staging rechecks free space for the files it will write", async () => {
+  let available = 0;
+  const archive = await readArchive(
+    await zip({
+      "Foo/Foo.toc": toc,
+      "Foreign/Foreign.toc": "## Interface: 11508",
+      "Foreign/large": "x".repeat(1000),
+    }),
+    { flavor: "forever", availableBytes: async () => available },
+  );
+  await withStaging(async (dir) => {
+    await expect(archive.extract(dir)).rejects.toThrow("available disk space");
+    expect(await readdir(dir)).toEqual([]);
+    available = toc.length;
+    await archive.extract(dir);
+    expect(await readdir(dir)).toEqual(["Foo"]);
+  });
+});
+
+test("shared folder versions are taken from a compatible TOC", async () => {
+  const archive = await readArchive(
+    await zip({
+      "Foo/Foo.toc": "## Interface: 11508\n## Version: v1",
+      "Foo/Foo_Forever.toc": `${toc}## Version: v2`,
+    }),
+    { flavor: "forever" },
+  );
+  expect(archive.versions.get("foo")).toBe("v2");
+});
+
 test("extracts an archive larger than 500 MiB", async () => {
   const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
   await writer.add("Foo/Foo.toc", new TextReader(toc));

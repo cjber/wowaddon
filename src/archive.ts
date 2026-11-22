@@ -18,6 +18,7 @@ export interface ArchiveOptions {
   signal?: AbortSignal;
   maxEntries?: number;
   maxBytes: number;
+  availableBytes?: typeof availableArchiveBytes;
 }
 function bad(message: string): never {
   throw new WowaddonError("ARCHIVE_INVALID", message);
@@ -173,18 +174,29 @@ export async function readArchive(bytes: Uint8Array, opts: ArchiveOptions): Prom
       const [top, file, ...rest] = path.split("/");
       if (!file || rest.length || !tocMatchesFolder(file, top)) continue;
       const toc = await tocInfo(entry);
-      if (toc.compatible) compatible.add(top);
+      if (!toc.compatible) continue;
+      compatible.add(top);
       const key = top.toLowerCase();
       if (!versions.has(key)) versions.set(key, toc.version);
     }
+    const shouldStage = (path: string) => {
+      const slash = path.indexOf("/");
+      return slash >= 0 && compatible.has(path.slice(0, slash));
+    };
+    const stagedBytes = files.reduce(
+      (total, { path, entry }) => total + (shouldStage(path) ? entry.uncompressedSize : 0),
+      0,
+    );
     let validated = false;
     async function extract(stagingDir?: string) {
       if (!stagingDir && validated) return;
       try {
-        if (stagingDir) checkSpace(declared, await availableArchiveBytes(stagingDir));
+        if (stagingDir) {
+          const available = await (opts.availableBytes ?? availableArchiveBytes)(stagingDir);
+          checkSpace(stagedBytes, available);
+        }
         for (const { path, entry } of files) {
-          const slash = path.indexOf("/");
-          if (stagingDir && slash >= 0 && compatible.has(path.slice(0, slash)))
+          if (stagingDir && shouldStage(path))
             await stageEntry(entry, join(stagingDir, path), opts.signal);
           else if (!validated && !tocs.has(entry)) await streamEntry(entry, () => {}, opts.signal);
         }

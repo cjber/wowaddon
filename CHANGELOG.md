@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Large add-on ZIPs can install when the target volume has enough free space. Files stream into
+  staging in place of the fixed 500 MiB decompression limit.
+
 - An expiring dev build is replaced only when its `+<sha>` is contained in the newer release
   (GitHub compare of the release tag against the commit). A build of an unmerged branch, or one
   with no commit, repository or answer from GitHub, stays a dev link instead of being swapped for
