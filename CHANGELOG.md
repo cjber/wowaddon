@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.7] - 2026-11-27
+
 ### Fixed
 
 - Large add-on ZIPs can install when the target volume has enough free space. Files stream into
